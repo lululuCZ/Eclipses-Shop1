@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eclipses Shop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="api.js"></script>
+</head>
+<body>
+
+<div class="stars"></div>
+
+<header>
+  <a href="index.html" class="brand" style="text-decoration: none; color: inherit;">
+    <div class="mark">E</div>
+    <div>
+      ECLIPSES
+      <div class="sub">shop</div>
+    </div>
+  </a>
+  <div class="header-actions" style="display: flex; align-items: center; gap: 10px;">
+    <div id="userProfileChip"></div>
+
+    <button class="admin-btn" id="addCategoryBtn" style="display:none;">+ Category</button>
+    <button class="admin-btn" id="addItemBtn" style="display:none;">+ Item</button>
+    <button class="cart-btn" id="cartToggle">
+      🛒 Cart <span class="cart-count" id="cartCount">0</span>
+    </button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs"></nav>
+
+<main id="sections"></main>
+
+<div class="overlay" id="overlay"></div>
+
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <h3>Your Cart</h3>
+    <button class="close-btn" id="closeDrawer">&times;</button>
+  </div>
+  <div class="drawer-items" id="drawerItems">
+    <div class="empty-cart">Your cart is empty.<br>Add some items to get started.</div>
+  </div>
+  <div class="drawer-foot">
+    <div class="cart-total-row">
+      <span class="cart-total-label">Total USD</span>
+      <span class="cart-total-value mono" id="cartTotal">$0.00</span>
+    </div>
+    <div class="cart-total-row" id="robuxTotalRow" style="display:none;">
+      <span class="cart-total-label">Total Robux</span>
+      <span class="mono" id="cartRobuxTotal" style="color: #00a2ff; font-weight:700;">R$0</span>
+    </div>
+    <div class="cart-total-row" id="lbTotalRow" style="display:none;">
+      <span class="cart-total-label">Total LB</span>
+      <span class="mono" id="cartLbTotal" style="color: var(--accent); font-weight:700;">0 LB</span>
+    </div>
+    <div class="cart-total-row" id="gemsTotalRow" style="display:none;">
+      <span class="cart-total-label">Total PS99 Gems</span>
+      <span class="mono" id="cartGemsTotal" style="color: #2bf3b4; font-weight:700;">0 Gems</span>
+    </div>
+    <div class="cart-total-row" id="hugesTotalRow" style="display:none;">
+      <span class="cart-total-label">Total PS99 Huges</span>
+      <span class="mono" id="cartHugesTotal" style="color: #f04bf0; font-weight:700;">0 Huges</span>
+    </div>
+    <button class="checkout-btn" id="checkoutBtn" disabled>Select Payment Method</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent">
+    </div>
+</div>
+
+<script>
+let savedUser = null;
+let IS_ADMIN = false;
+
+const PAYPAL_CLIENT_ID = "AX9rP4zxoFyb1QHeLooc4L5dbqWdKbb6E7zOPknXvmbXzIP7TgvjCNfpS9ASisjesKbynHi69qMotETY";
+const CURRENCY = "USD";
+
+let CATALOG = [];
+let cart = {};
+let activeSection = null;
+
+function findItem(id){
+  for(const sec of CATALOG){
+    const found = sec.items.find(i => i.id === id);
+    if(found) return found;
+  }
+  return null;
+}
+
+function money(n){ return "$" + n.toFixed(2); }
+function lbMoney(n){ return Number(n).toLocaleString() + " LB"; }
+function robuxMoney(n){ return "R$" + Number(n).toLocaleString(); }
+function gemsMoney(n) { return Number(n).toLocaleString() + " Gems"; }
+function hugesMoney(n) { return Number(n).toLocaleString() + " Huge(s)"; }
+
+function renderProfileChip() {
+  if (IS_ADMIN) {
+    document.getElementById("userProfileChip").innerHTML = `
+      <div style="padding: 6px 12px; background: rgba(255,215,0,0.1); border: 1px solid #ffd700; border-radius: 6px; font-size: 12px; color: #ffd700; font-family: 'Inter', sans-serif;">
+        Admin Account: <strong>${escapeHtml(savedUser)}</strong>
+      </div>
+    `;
+    document.getElementById("addCategoryBtn").style.display = "";
+    document.getElementById("addItemBtn").style.display = "";
+  } else {
+    document.getElementById("userProfileChip").innerHTML = `
+      <div style="padding: 6px 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; font-size: 12px; color: #aaa; font-family: 'Inter', sans-serif;">
+        User: <strong style="color: #fff;">${escapeHtml(savedUser)}</strong>
+      </div>
+    `;
+  }
+}
+
+function renderTabs(){
+  const tabsEl = document.getElementById("tabs");
+  let tabsHtml = CATALOG.map(sec => `
+    <button class="tab ${sec.id === activeSection ? 'active' : ''}" data-section="${sec.id}">
+      ${escapeHtml(sec.label)}
+    </button>
+  `).join("");
+
+  if (IS_ADMIN) {
+    tabsHtml += `
+      <button class="tab ${activeSection === 'admin-orders' ? 'active' : ''}" data-section="admin-orders" style="border-color: #ffd700; color: #ffd700;">
+        📋 Orders Log Panel
+      </button>
+    `;
+  }
+
+  tabsEl.innerHTML = tabsHtml;
+
+  tabsEl.querySelectorAll(".tab").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      activeSection = btn.dataset.section;
+      renderTabs();
+      renderSections();
+    });
+  });
+}
+
+async function renderSections(){
+  const container = document.getElementById("sections");
+
+  if (activeSection === 'admin-orders') {
+    let orders = [];
+    try { orders = await Api.getOrders(); } catch (e) { console.error(e); }
+
+    if(orders.length === 0) {
+      container.innerHTML = `
+        <section class="section active">
+          <h2>Customer Orders Database</h2>
+          <div class="empty-section"><p>No orders have been submitted yet.</p></div>
+        </section>
+      `;
+      return;
+    }
+
+    const ordersHtml = orders.map(o => `
+      <div class="order-card">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px;">
+          <div>Order ID: <strong class="mono">${escapeHtml(o.id)}</strong></div>
+          <div style="color:var(--text-dim); font-size:12px;">${escapeHtml(o.date)}</div>
+        </div>
+        <div style="margin-bottom:8px;">
+          Buyer: <strong>${escapeHtml(o.user)}</strong>
+          <span class="order-badge" style="background:rgba(255,255,255,0.1); color:#fff;">${escapeHtml(o.method)}</span>
+        </div>
+        <div style="margin-bottom:10px; padding:6px; background:rgba(0,0,0,0.2); border-radius:4px;">
+          <strong>Items Ordered:</strong><br><span style="font-size:13px; color:#ccc;">${escapeHtml(o.items)}</span>
+        </div>
+        ${o.tradeUsername ? `<div style="margin-bottom:6px; color:#f2c879;">🎮 <strong>Trade / In-Game Username:</strong> ${escapeHtml(o.tradeUsername)}</div>` : ''}
+        ${o.deliveryType ? `<div style="margin-bottom:6px; color:#2bf3b4;">📦 <strong>PS99 Handled Method:</strong> ${escapeHtml(o.deliveryType)}</div>` : ''}
+        <div>📝 <strong>Customer Notes:</strong> ${escapeHtml(o.notes) || 'None'}</div>
+      </div>
+    `).join("");
+
+    container.innerHTML = `
+      <section class="section active">
+        <div class="section-head">
+          <h2>Customer Orders Database</h2>
+          <button class="delete-category-btn" id="clearOrdersBtn" style="background:#ff4a4a; color:#fff;">Clear All Logs</button>
+        </div>
+        <div style="max-width:800px; margin:0 auto;">${ordersHtml}</div>
+      </section>
+    `;
+
+    document.getElementById("clearOrdersBtn").addEventListener("click", async () => {
+      if(confirm("Permanently wipe all incoming history logs?")) {
+        await Api.clearOrders();
+        renderSections();
+      }
+    });
+    return;
+  }
+
+  if(CATALOG.length === 0){
+    container.innerHTML = `
+      <div class="empty-section" style="padding:70px 20px;">
+        <div class="empty-section-icon">◐</div>
+        <p>No categories yet. Add one to get started.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const sec = CATALOG.find(s => s.id === activeSection);
+  if (!sec) return;
+
+  container.innerHTML = `
+    <section class="section active" id="sec-${sec.id}">
+      <div class="section-head">
+        <h2>${escapeHtml(sec.label)}</h2>
+        <div class="section-head-right">
+          <span class="count">${sec.items.length} items</span>
+          ${IS_ADMIN ? `<button class="delete-category-btn" data-section="${sec.id}" title="Delete this category">Delete category</button>` : ''}
+        </div>
+      </div>
+      ${sec.items.length === 0 ? `
+        <div class="empty-section">
+          <div class="empty-section-icon">◐</div>
+          <p>No items in this section yet.</p>
+        </div>
+      ` : `
+        <div class="grid">
+          ${sec.items.map(renderCard).join("")}
+        </div>
+      `}
+    </section>
+  `;
+
+  container.querySelectorAll(".add-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      addToCart(btn.dataset.id);
+      btn.textContent = "Added ✓";
+      btn.classList.add("added");
+      setTimeout(()=>{
+        btn.textContent = "Add to Cart";
+        btn.classList.remove("added");
+      }, 900);
+    });
+  });
+
+  if (IS_ADMIN) {
+    container.querySelectorAll(".delete-item-btn").forEach(btn=>{
+      btn.addEventListener("click", async (e)=>{
+        e.stopPropagation();
+        await deleteItem(btn.dataset.id);
+      });
+    });
+
+    container.querySelectorAll(".delete-category-btn").forEach(btn=>{
+      btn.addEventListener("click", async ()=>{
+        await deleteCategory(btn.dataset.section);
+      });
+    });
+  }
+}
+
+function renderCard(item){
+  const media = item.image
+    ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" class="card-img">`
+    : `<span class="card-placeholder">◐</span>`;
+
+  const deleteBtnHtml = IS_ADMIN
+    ? `<button class="delete-item-btn" data-id="${escapeHtml(item.id)}" title="Delete this item">&times;</button>`
+    : '';
+
+  return `
+    <div class="card">
+      ${deleteBtnHtml}
+      <div class="card-icon">${media}</div>
+      <div class="card-name">${escapeHtml(item.name)}</div>
+      <div class="card-desc">${escapeHtml(item.desc) || ''}</div>
+      <div class="card-foot">
+        <div class="price-block">
+          <span class="price-usd">${money(item.price)}</span>
+          ${item.robux ? `<span class="price-robux">${robuxMoney(item.robux)}</span>` : ''}
+          ${item.lb ? `<span class="price-lb">${lbMoney(item.lb)}</span>` : ''}
+          ${item.gems ? `<span class="price-gems">${gemsMoney(item.gems)}</span>` : ''}
+          ${item.huges ? `<span class="price-huges">${hugesMoney(item.huges)}</span>` : ''}
+        </div>
+        <button class="add-btn" data-id="${item.id}">Add to Cart</button>
+      </div>
+    </div>
+  `;
+}
+
+function addToCart(id){
+  const item = findItem(id);
+  if(!item) return;
+  if(cart[id]) cart[id].qty += 1;
+  else cart[id] = { item, qty: 1 };
+  renderCart();
+}
+
+function changeQty(id, delta){
+  if(!cart[id]) return;
+  cart[id].qty += delta;
+  if(cart[id].qty <= 0) delete cart[id];
+  renderCart();
+}
+
+function removeFromCart(id){
+  delete cart[id];
+  renderCart();
+}
+
+function cartTotalField(field) {
+  return Object.values(cart).reduce((sum, c) => sum + (c.item[field] || 0) * c.qty, 0);
+}
+
+function cartCount(){
+  return Object.values(cart).reduce((sum, c) => sum + c.qty, 0);
+}
+
+function renderCart(){
+  const itemsEl = document.getElementById("drawerItems");
+  const entries = Object.entries(cart);
+
+  document.getElementById("cartCount").textContent = cartCount();
+  document.getElementById("cartTotal").textContent = money(cartTotalField('price'));
+
+  const setupAltTotal = (idRow, idVal, value, formatted) => {
+    const elRow = document.getElementById(idRow);
+    if(value > 0) {
+      elRow.style.display = "flex";
+      document.getElementById(idVal).textContent = formatted;
+    } else {
+      elRow.style.display = "none";
+    }
+  };
+
+  setupAltTotal("robuxTotalRow", "cartRobuxTotal", cartTotalField('robux'), robuxMoney(cartTotalField('robux')));
+  setupAltTotal("lbTotalRow", "cartLbTotal", cartTotalField('lb'), lbMoney(cartTotalField('lb')));
+  setupAltTotal("gemsTotalRow", "cartGemsTotal", cartTotalField('gems'), gemsMoney(cartTotalField('gems')));
+  setupAltTotal("hugesTotalRow", "cartHugesTotal", cartTotalField('huges'), hugesMoney(cartTotalField('huges')));
+
+  document.getElementById("checkoutBtn").disabled = entries.length === 0;
+
+  if(entries.length === 0){
+    itemsEl.innerHTML = `<div class="empty-cart">Your cart is empty.<br>Add some items to get started.</div>`;
+    return;
+  }
+
+  itemsEl.innerHTML = entries.map(([id, c]) => `
+    <div class="cart-row">
+      <div class="card-icon" style="width:50px !important; height:50px !important; margin:0;">${c.item.image ? `<img src="${escapeHtml(c.item.image)}" alt="${escapeHtml(c.item.name)}" class="card-img">` : `<span class="card-placeholder">◐</span>`}</div>
+      <div class="cart-row-info">
+        <div class="cart-row-name">${escapeHtml(c.item.name)}</div>
+        <div class="cart-row-price mono" style="font-size:11px; opacity:0.8;">
+          ${money(c.item.price)}
+          ${c.item.robux ? ` | R$${c.item.robux}` : ''}
+          ${c.item.lb ? ` | ${c.item.lb} LB` : ''}
+          ${c.item.gems ? ` | ${c.item.gems} Gems` : ''}
+          ${c.item.huges ? ` | ${c.item.huges} Huge` : ''}
+        </div>
+        <div class="qty-controls">
+          <button data-action="dec" data-id="${id}">−</button>
+          <span class="mono">${c.qty}</span>
+          <button data-action="inc" data-id="${id}">+</button>
+        </div>
+      </div>
+      <button class="remove-x" data-action="remove" data-id="${id}">&times;</button>
+    </div>
+  `).join("");
+
+  itemsEl.querySelectorAll("button[data-action]").forEach(btn=>{
+    const id = btn.dataset.id;
+    const action = btn.dataset.action;
+    btn.addEventListener("click", ()=>{
+      if(action === "inc") changeQty(id, 1);
+      else if(action === "dec") changeQty(id, -1);
+      else if(action === "remove") removeFromCart(id);
+    });
+  });
+}
+
+const drawer = document.getElementById("drawer");
+const overlay = document.getElementById("overlay");
+
+function openDrawer(){ drawer.classList.add("open"); overlay.classList.add("open"); }
+function closeDrawer(){ drawer.classList.remove("open"); overlay.classList.remove("open"); }
+
+document.getElementById("cartToggle").addEventListener("click", openDrawer);
+document.getElementById("closeDrawer").addEventListener("click", closeDrawer);
+overlay.addEventListener("click", ()=>{ closeDrawer(); closeModal(); });
+
+const modalOverlay = document.getElementById("modalOverlay");
+const modalContent = document.getElementById("modalContent");
+let paypalSdkLoaded = false;
+
+function openModal(){ modalOverlay.classList.add("open"); }
+function closeModal(){ modalOverlay.classList.remove("open"); }
+
+function loadPaypalSdk(){
+  return new Promise((resolve, reject)=>{
+    if(paypalSdkLoaded && window.paypal){ resolve(); return; }
+    const script = document.createElement("script");
+    script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(PAYPAL_CLIENT_ID)}&currency=${CURRENCY}`;
+    script.onload = ()=>{ paypalSdkLoaded = true; resolve(); };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+function buildOrderDescription(){
+  return Object.values(cart).map(c => `${c.item.name} x${c.qty}`).join(", ").slice(0, 120);
+}
+
+function startCheckout(){
+  const usd = cartTotalField('price');
+  const robux = cartTotalField('robux');
+  const lb = cartTotalField('lb');
+  const gems = cartTotalField('gems');
+  const huges = cartTotalField('huges');
+
+  modalContent.innerHTML = `
+    <h3>Select Payment Method</h3>
+    <p>Choose your preferred currency matching parameter to complete your exchange invoice processing routing structure.</p>
+
+    <div style="display:flex; flex-direction:column; gap:10px; margin: 15px 0;">
+      <button class="checkout-btn" id="payPaypal" style="background:var(--panel); border:1px solid var(--border); color:var(--text); box-shadow:none; text-align:left; display:flex; justify-content:space-between; align-items:center;">
+        <span>💳 PayPal Cash</span> <span class="mono">${money(usd)}</span>
+      </button>
+      <button class="checkout-btn" id="payRobux" ${robux===0?'disabled':''} style="background:var(--panel); border:1px solid var(--border); color:var(--text); box-shadow:none; text-align:left; display:flex; justify-content:space-between; align-items:center;">
+        <span>🎮 Robux Token</span> <span class="mono" style="color:#00a2ff;">${robuxMoney(robux)}</span>
+      </button>
+      <button class="checkout-btn" id="payLb" ${lb===0?'disabled':''} style="background:var(--panel); border:1px solid var(--border); color:var(--text); box-shadow:none; text-align:left; display:flex; justify-content:space-between; align-items:center;">
+        <span>◐ LB Currency</span> <span class="mono" style="color:var(--accent);">${lbMoney(lb)}</span>
+      </button>
+      <button class="checkout-btn" id="payGems" ${gems===0?'disabled':''} style="background:var(--panel); border:1px solid var(--border); color:var(--text); box-shadow:none; text-align:left; display:flex; justify-content:space-between; align-items:center;">
+        <span>💎 PS99 Gems</span> <span class="mono" style="color:#2bf3b4;">${gemsMoney(gems)}</span>
+      </button>
+      <button class="checkout-btn" id="payHuges" ${huges===0?'disabled':''} style="background:var(--panel); border:1px solid var(--border); color:var(--text); box-shadow:none; text-align:left; display:flex; justify-content:space-between; align-items:center;">
+        <span>🧸 PS99 Huges</span> <span class="mono" style="color:#f04bf0;">${hugesMoney(huges)}</span>
+      </button>
+    </div>
+    <button class="modal-close" id="modalCloseBtn">Cancel</button>
+  `;
+  document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
+  document.getElementById("payPaypal").addEventListener("click", startPaypalGate);
+  document.getElementById("payRobux").addEventListener("click", () => finalizeAlternative("Robux", robuxMoney(robux)));
+  document.getElementById("payLb").addEventListener("click", () => finalizeAlternative("LB Currency", lbMoney(lb)));
+  document.getElementById("payGems").addEventListener("click", () => finalizeAlternative("PS99 Gems", gemsMoney(gems)));
+  document.getElementById("payHuges").addEventListener("click", () => finalizeAlternative("PS99 Huges", hugesMoney(huges)));
+  openModal();
+}
+
+async function startPaypalGate(){
+  const total = cartTotalField('price');
+  if(PAYPAL_CLIENT_ID === "YOUR_PAYPAL_CLIENT_ID_HERE"){
+    modalContent.innerHTML = `
+      <div class="status-msg"><div class="icon">⚠️</div><h3>PayPal Configuration Blank</h3></div>
+      <button class="modal-close" id="modalCloseBtn">Close</button>
+    `;
+    document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
+    return;
+  }
+
+  modalContent.innerHTML = `
+    <h3>Secure Gateway Invoice</h3>
+    <div class="modal-total"><span class="cart-total-label">Total</span><span class="cart-total-value mono">${money(total)}</span></div>
+
+    <div class="form-field" style="margin-bottom:12px;">
+      <label>Order Notes / Special Requests</label>
+      <textarea id="paypalNotesInput" placeholder="Add custom instructions..." style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;"></textarea>
+    </div>
+
+    <div id="paypal-button-container"></div>
+    <button class="modal-close" id="modalCloseBtn">Back</button>
+  `;
+  document.getElementById("modalCloseBtn").addEventListener("click", startCheckout);
+
+  try{ await loadPaypalSdk(); }catch(e){ closeModal(); return; }
+
+  window.paypal.Buttons({
+    style: { layout: 'vertical', color: 'gold', shape: 'rect' },
+    createOrder: (data, actions) => actions.order.create({ purchase_units: [{ description: `User: ${savedUser} - ${buildOrderDescription()}`, amount: { value: total.toFixed(2), currency_code: CURRENCY } }] }),
+    onApprove: (data, actions) => actions.order.capture().then(async details => {
+      const n = document.getElementById("paypalNotesInput").value;
+      await Api.createOrder({
+        method: "PayPal USD",
+        items: buildOrderDescription(),
+        notes: n
+      });
+      showSuccess(details?.payer?.name?.given_name);
+      cart={};
+      renderCart();
+    }),
+    onError: () => showError()
+  }).render('#paypal-button-container');
+}
+
+function finalizeAlternative(methodName, textVal) {
+  let extraInputsHtml = '';
+
+  if (methodName === "LB Currency") {
+    extraInputsHtml = `
+      <div class="form-field" style="margin-top:12px; margin-bottom:12px;">
+        <label style="color:#f2c879; font-weight:600;">Your In-Game / Trade Username</label>
+        <input type="text" id="altAccDetails" placeholder="Username used for the in-game trade" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;">
+        <p style="font-size:11px; color:var(--text-faint); margin-top:4px;">We only need your username to send a trade request — never share your password with anyone, including this shop.</p>
+      </div>
+    `;
+  } else if (methodName === "PS99 Gems" || methodName === "PS99 Huges") {
+    extraInputsHtml = `
+      <div class="form-field" style="margin-top:12px; margin-bottom:12px;">
+        <label style="color:#2bf3b4; font-weight:600;">Delivery Method Preference</label>
+        <select id="ps99DeliveryType" style="width:100%; padding:8px; background:#111116; border:1px solid var(--border); border-radius:6px; color:#fff; font-family:inherit;">
+          <option value="Direct Gift to Radecek4110">Direct Gift to Radecek4110</option>
+          <option value="Head to Head Trade">Head to Head Trade</option>
+        </select>
+      </div>
+    `;
+  }
+
+  modalContent.innerHTML = `
+    <h3>Checkout with ${methodName}</h3>
+    <p>Please review details and attach matching processing criteria parameters to complete order request routing logs.</p>
+
+    ${extraInputsHtml}
+
+    <div class="form-field" style="margin-bottom:12px;">
+      <label>General Order Notes</label>
+      <textarea id="altNotesInput" placeholder="Add custom notes..." style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;"></textarea>
+    </div>
+
+    <div class="modal-total"><span class="cart-total-label">Required Balance due</span><span class="mono" style="font-size:18px; font-weight:700; color:var(--accent);">${textVal}</span></div>
+    <button class="checkout-btn" id="confirmAltBtn">Confirm Purchase</button>
+    <button class="modal-close" id="modalCloseBtn">Back</button>
+  `;
+  document.getElementById("modalCloseBtn").addEventListener("click", startCheckout);
+  document.getElementById("confirmAltBtn").addEventListener("click", async () => {
+    const n = document.getElementById("altNotesInput").value;
+    const tradeUsername = document.getElementById("altAccDetails") ? document.getElementById("altAccDetails").value : undefined;
+    const del = document.getElementById("ps99DeliveryType") ? document.getElementById("ps99DeliveryType").value : undefined;
+
+    await Api.createOrder({
+      method: methodName,
+      items: buildOrderDescription(),
+      tradeUsername,
+      deliveryType: del,
+      notes: n
+    });
+
+    showSuccess(savedUser);
+    cart={};
+    renderCart();
+  });
+}
+
+function showSuccess(name){
+  modalContent.innerHTML = `
+    <div class="status-msg success"><div class="icon">✅</div><h3>Order Confirmed!</h3><p>Thank you, ${escapeHtml(name || "User")}. Verification processing sequence initiated.</p></div>
+    <button class="modal-close" id="modalCloseBtn3">Close</button>
+  `;
+  document.getElementById("modalCloseBtn3").addEventListener("click", ()=>{ closeModal(); closeDrawer(); if(activeSection === 'admin-orders') renderSections(); });
+}
+
+function showError(){
+  modalContent.innerHTML = `
+    <div class="status-msg"><div class="icon">⚠️</div><h3>Transaction Fault</h3></div>
+    <button class="modal-close" id="modalCloseBtn4">Close</button>
+  `;
+  document.getElementById("modalCloseBtn4").addEventListener("click", closeModal);
+}
+
+document.getElementById("checkoutBtn").addEventListener("click", startCheckout);
+
+async function openAddCategoryModal(){
+  modalContent.innerHTML = `
+    <h3>New category</h3>
+    <div class="form-field"><label for="newCatName">Category name</label><input type="text" id="newCatName" maxlength="40"></div>
+    <div class="form-error" id="catFormError"></div>
+    <button class="checkout-btn" id="submitCategory">Add category</button>
+    <button class="modal-close" id="modalCloseCat">Cancel</button>
+  `;
+  document.getElementById("modalCloseCat").addEventListener("click", closeModal);
+  document.getElementById("submitCategory").addEventListener("click", async ()=>{
+    const name = document.getElementById("newCatName").value.trim();
+    if(!name) return;
+    try {
+      CATALOG = await Api.addCategory(name);
+      activeSection = CATALOG[CATALOG.length - 1]?.id || activeSection;
+      renderTabs(); renderSections(); closeModal();
+    } catch (err) {
+      document.getElementById("catFormError").textContent = err.message;
+    }
+  });
+  openModal();
+}
+
+async function openAddItemModal(){
+  if(CATALOG.length === 0) return;
+
+  modalContent.innerHTML = `
+    <h3>New item</h3>
+    <div class="form-field">
+      <label for="itemCategory">Category</label>
+      <select id="itemCategory">${CATALOG.map(sec => `<option value="${sec.id}" ${sec.id === activeSection ? 'selected' : ''}>${escapeHtml(sec.label)}</option>`).join("")}</select>
+    </div>
+    <div class="form-field"><label for="itemName">Name</label><input type="text" id="itemName" maxlength="60"></div>
+    <div class="form-field"><label for="itemImage">Image URL</label><input type="text" id="itemImage"></div>
+    <div class="form-field"><label for="itemDesc">Description</label><textarea id="itemDesc" maxlength="200" rows="2"></textarea></div>
+
+    <div class="form-row">
+      <div class="form-field"><label for="itemUsd">Price (USD)</label><input type="number" id="itemUsd" step="0.01"></div>
+      <div class="form-field"><label for="itemRobux">Price (Robux)</label><input type="number" id="itemRobux"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label for="itemLb">Price (LB)</label><input type="number" id="itemLb"></div>
+      <div class="form-field"><label for="itemGems">Price (PS99 Gems)</label><input type="number" id="itemGems"></div>
+    </div>
+    <div class="form-field">
+      <label for="itemHuges">Price (PS99 Huges)</label>
+      <input type="number" id="itemHuges" placeholder="e.g. 2">
+    </div>
+
+    <div class="form-error" id="itemFormError"></div>
+    <button class="checkout-btn" id="submitItem">Add item</button>
+    <button class="modal-close" id="modalCloseItem">Cancel</button>
+  `;
+  document.getElementById("modalCloseItem").addEventListener("click", closeModal);
+  document.getElementById("submitItem").addEventListener("click", async ()=>{
+    const categoryId = document.getElementById("itemCategory").value;
+    const name = document.getElementById("itemName").value.trim();
+    const image = document.getElementById("itemImage").value.trim();
+    const desc = document.getElementById("itemDesc").value.trim();
+    const usdRaw = document.getElementById("itemUsd").value;
+    const robuxRaw = document.getElementById("itemRobux").value;
+    const lbRaw = document.getElementById("itemLb").value;
+    const gemsRaw = document.getElementById("itemGems").value;
+    const hugesRaw = document.getElementById("itemHuges").value;
+
+    if(!name || usdRaw === "") return;
+
+    try {
+      CATALOG = await Api.addItem({
+        categoryId, name, image: image || undefined, desc,
+        price: Number(usdRaw),
+        robux: robuxRaw ? Number(robuxRaw) : undefined,
+        lb: lbRaw ? Number(lbRaw) : undefined,
+        gems: gemsRaw ? Number(gemsRaw) : undefined,
+        huges: hugesRaw ? Number(hugesRaw) : undefined
+      });
+      activeSection = categoryId; renderTabs(); renderSections(); closeModal();
+    } catch (err) {
+      document.getElementById("itemFormError").textContent = err.message;
+    }
+  });
+  openModal();
+}
+
+document.getElementById("addCategoryBtn").addEventListener("click", openAddCategoryModal);
+document.getElementById("addItemBtn").addEventListener("click", openAddItemModal);
+
+async function deleteItem(id){
+  CATALOG = await Api.deleteItem(id);
+  renderSections();
+}
+
+async function deleteCategory(id){
+  if (!confirm("Delete category?")) return;
+  CATALOG = await Api.deleteCategory(id);
+  if(activeSection === id) activeSection = CATALOG.length ? CATALOG[0].id : null;
+  renderTabs(); renderSections();
+}
+
+(async function init() {
+  let session;
+  try {
+    session = await Api.session();
+  } catch {
+    window.location.href = "index.html";
+    return;
+  }
+
+  savedUser = session.username;
+  IS_ADMIN = session.isAdmin;
+  renderProfileChip();
+
+  CATALOG = await Api.getCatalog();
+  activeSection = CATALOG.length ? CATALOG[0].id : null;
+
+  renderTabs();
+  renderSections();
+  renderCart();
+})();
+</script>
+</body>
+</html>

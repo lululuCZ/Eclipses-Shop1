@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eclipses Shop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="api.js"></script>
+</head>
+<body class="landing">
+
+  <div class="stars"></div>
+
+  <main class="hero">
+    
+    <h1 class="hero-title">Eclipses Shop</h1>
+
+    <p class="hero-tagline">
+      A trusted spot to buy bases and in-game items. Straightforward pricing,
+      fast delivery, and real support if anything ever goes wrong — no shady
+      middlemen, just what you came for.
+    </p>
+
+    <div class="trust-row">
+      <div class="trust-item">
+        <span class="trust-icon">◐</span>
+        <span>Trusted sellers</span>
+      </div>
+      <div class="trust-item">
+        <span class="trust-icon">◐</span>
+        <span>Secure PayPal checkout</span>
+      </div>
+      <div class="trust-item">
+        <span class="trust-icon">◐</span>
+        <span>Fast delivery</span>
+      </div>
+    </div>
+
+    <div class="methods-grid">
+      <div class="method-card">💳 PayPal Cash <span>USD</span></div>
+      <div class="method-card">🎮 Roblox Asset <span>Robux</span></div>
+      <div class="method-card">◐ In-Game Tokens <span>LB</span></div>
+      <div class="method-card">💎 Pet Sim 99 <span>Gems</span></div>
+      <div class="method-card">🧸 Pet Sim 99 <span>Huges</span></div>
+    </div>
+
+    <div id="authBox" style="margin: 24px auto 0 auto; background: rgba(20, 20, 20, 0.6); backdrop-filter: blur(8px); border: 1px solid var(--border, rgba(255,255,255,0.1)); padding: 24px; border-radius: 12px; width: 100%; max-width: 340px; text-align: left; box-sizing: border-box;">
+      <p style="text-align:center; color:#888; font-size:13px;">Loading…</p>
+    </div>
+  </main>
+
+<script>
+function showLogin() {
+  const authBox = document.getElementById("authBox");
+  authBox.style.textAlign = "left";
+  authBox.innerHTML = `
+    <h3 style="font-family:'Cinzel', serif; margin: 0 0 16px 0; font-size: 18px; color: #fff; letter-spacing: 1px; text-align: center;">Account Login</h3>
+    <div style="margin-bottom: 12px;">
+      <label style="display: block; font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px; font-weight: 600;">Username</label>
+      <input type="text" id="loginUser" placeholder="Enter username" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; box-sizing: border-box; font-family: inherit;">
+    </div>
+    <div style="margin-bottom: 12px;">
+      <label style="display: block; font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px; font-weight: 600;">Password</label>
+      <input type="password" id="loginPass" placeholder="Enter password" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; box-sizing: border-box; font-family: inherit;">
+    </div>
+    <div id="authError" style="color: #ff4a4a; font-size: 12px; margin-bottom: 12px; min-height: 16px; text-align: center;"></div>
+    <button class="enter-btn" id="submitLoginBtn" style="width: 100%; margin: 0; padding: 12px; cursor: pointer;">Sign In</button>
+    <p style="font-size: 12px; color: #888; text-align: center; margin: 14px 0 0 0;">
+      New customer? <a href="#" id="toRegister" style="color: #fff; text-decoration: underline;">Create an account</a>
+    </p>
+  `;
+
+  document.getElementById("toRegister").addEventListener("click", (e) => { e.preventDefault(); showRegister(); });
+  document.getElementById("submitLoginBtn").addEventListener("click", handleLogin);
+  document.getElementById("loginPass").addEventListener("keydown", (e) => { if (e.key === "Enter") handleLogin(); });
+}
+
+function showRegister() {
+  const authBox = document.getElementById("authBox");
+  authBox.innerHTML = `
+    <h3 style="font-family:'Cinzel', serif; margin: 0 0 16px 0; font-size: 18px; color: #fff; letter-spacing: 1px; text-align: center;">Register Account</h3>
+    <div style="margin-bottom: 12px;">
+      <label style="display: block; font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px; font-weight: 600;">Choose Username</label>
+      <input type="text" id="regUser" placeholder="Pick a username" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; box-sizing: border-box; font-family: inherit;">
+    </div>
+    <div style="margin-bottom: 12px;">
+      <label style="display: block; font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px; font-weight: 600;">Password</label>
+      <input type="password" id="regPass" placeholder="Create private password (6+ chars)" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #fff; box-sizing: border-box; font-family: inherit;">
+    </div>
+    <div id="authError" style="color: #ff4a4a; font-size: 12px; margin-bottom: 12px; min-height: 16px; text-align: center;"></div>
+    <button class="enter-btn" id="submitRegisterBtn" style="width: 100%; margin: 0; padding: 12px; cursor: pointer;">Sign Up</button>
+    <p style="font-size: 12px; color: #888; text-align: center; margin: 14px 0 0 0;">
+      Have an account? <a href="#" id="toLogin" style="color: #fff; text-decoration: underline;">Log in</a>
+    </p>
+  `;
+
+  document.getElementById("toLogin").addEventListener("click", (e) => { e.preventDefault(); showLogin(); });
+  document.getElementById("submitRegisterBtn").addEventListener("click", handleRegister);
+}
+
+function showLoggedIn(username, isAdmin) {
+  const authBox = document.getElementById("authBox");
+  authBox.style.textAlign = "center";
+
+  const badgeHtml = isAdmin
+    ? `<span style="background:#ffd700; color:#000; font-size:10px; font-weight:bold; padding:2px 6px; border-radius:4px; margin-left:6px; vertical-align:middle;">ADMIN</span>`
+    : '';
+
+  authBox.innerHTML = `
+    <div style="font-size: 14px; margin-bottom: 16px; color: #ccc;">
+      Logged in as: <strong style="color: #fff; font-size: 16px;">${escapeHtml(username)}</strong> ${badgeHtml}
+    </div>
+    <a href="shop.html" class="enter-btn" style="display: block; text-align: center; text-decoration: none;">Enter the Shop</a>
+    <button id="logoutBtn" style="background: none; border: none; color: #ff4a4a; margin-top: 14px; cursor: pointer; font-size: 12px; text-decoration: underline; font-family: inherit;">
+      Sign Out
+    </button>
+  `;
+
+  document.getElementById("logoutBtn").addEventListener("click", async () => {
+    await Api.logout();
+    showLogin();
+  });
+}
+
+async function handleLogin() {
+  const user = document.getElementById("loginUser").value.trim();
+  const pass = document.getElementById("loginPass").value;
+  const errorEl = document.getElementById("authError");
+  const btn = document.getElementById("submitLoginBtn");
+
+  if (!user || !pass) {
+    errorEl.textContent = "Please fill in all fields.";
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const result = await Api.login(user, pass);
+    showLoggedIn(result.username, result.isAdmin);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    btn.disabled = false;
+  }
+}
+
+async function handleRegister() {
+  const user = document.getElementById("regUser").value.trim();
+  const pass = document.getElementById("regPass").value;
+  const errorEl = document.getElementById("authError");
+  const btn = document.getElementById("submitRegisterBtn");
+
+  if (!user || !pass) {
+    errorEl.textContent = "Fields cannot be empty.";
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const result = await Api.register(user, pass);
+    showLoggedIn(result.username, result.isAdmin);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    btn.disabled = false;
+  }
+}
+
+(async function init() {
+  try {
+    const session = await Api.session();
+    showLoggedIn(session.username, session.isAdmin);
+  } catch {
+    showLogin();
+  }
+})();
+</script>
+</body>
+</html>
