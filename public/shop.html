@@ -81,7 +81,7 @@
 let savedUser = null;
 let IS_ADMIN = false;
 
-const PAYPAL_CLIENT_ID = "AX9rP4zxoFyb1QHeLooc4L5dbqWdKbb6E7zOPknXvmbXzIP7TgvjCNfpS9ASisjesKbynHi69qMotETY";
+const PAYPAL_ME_HANDLE = "Smart2020lt2";
 const CURRENCY = "USD";
 
 let CATALOG = [];
@@ -178,6 +178,7 @@ async function renderSections(){
           <strong>Items Ordered:</strong><br><span style="font-size:13px; color:#ccc;">${escapeHtml(o.items)}</span>
         </div>
         ${o.tradeUsername ? `<div style="margin-bottom:6px; color:#f2c879;">🎮 <strong>Trade / In-Game Username:</strong> ${escapeHtml(o.tradeUsername)}</div>` : ''}
+        ${o.tradeLink ? `<div style="margin-bottom:6px; color:#f2c879;">🔗 <strong>Trade / Profile Link:</strong> <a href="${escapeHtml(o.tradeLink)}" target="_blank" rel="noopener" style="color:#f2c879;">${escapeHtml(o.tradeLink)}</a></div>` : ''}
         ${o.deliveryType ? `<div style="margin-bottom:6px; color:#2bf3b4;">📦 <strong>PS99 Handled Method:</strong> ${escapeHtml(o.deliveryType)}</div>` : ''}
         <div>📝 <strong>Customer Notes:</strong> ${escapeHtml(o.notes) || 'None'}</div>
       </div>
@@ -396,20 +397,12 @@ overlay.addEventListener("click", ()=>{ closeDrawer(); closeModal(); });
 
 const modalOverlay = document.getElementById("modalOverlay");
 const modalContent = document.getElementById("modalContent");
-let paypalSdkLoaded = false;
 
 function openModal(){ modalOverlay.classList.add("open"); }
 function closeModal(){ modalOverlay.classList.remove("open"); }
 
-function loadPaypalSdk(){
-  return new Promise((resolve, reject)=>{
-    if(paypalSdkLoaded && window.paypal){ resolve(); return; }
-    const script = document.createElement("script");
-    script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(PAYPAL_CLIENT_ID)}&currency=${CURRENCY}`;
-    script.onload = ()=>{ paypalSdkLoaded = true; resolve(); };
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
+function paypalMeLink(amount){
+  return `https://paypal.me/${PAYPAL_ME_HANDLE}/${amount.toFixed(2)}${CURRENCY}`;
 }
 
 function buildOrderDescription(){
@@ -457,17 +450,10 @@ function startCheckout(){
 
 async function startPaypalGate(){
   const total = cartTotalField('price');
-  if(PAYPAL_CLIENT_ID === "YOUR_PAYPAL_CLIENT_ID_HERE"){
-    modalContent.innerHTML = `
-      <div class="status-msg"><div class="icon">⚠️</div><h3>PayPal Configuration Blank</h3></div>
-      <button class="modal-close" id="modalCloseBtn">Close</button>
-    `;
-    document.getElementById("modalCloseBtn").addEventListener("click", closeModal);
-    return;
-  }
+  const payLink = paypalMeLink(total);
 
   modalContent.innerHTML = `
-    <h3>Secure Gateway Invoice</h3>
+    <h3>Pay with PayPal</h3>
     <div class="modal-total"><span class="cart-total-label">Total</span><span class="cart-total-value mono">${money(total)}</span></div>
 
     <div class="form-field" style="margin-bottom:12px;">
@@ -475,29 +461,30 @@ async function startPaypalGate(){
       <textarea id="paypalNotesInput" placeholder="Add custom instructions..." style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;"></textarea>
     </div>
 
-    <div id="paypal-button-container"></div>
+    <a href="${payLink}" target="_blank" rel="noopener" class="checkout-btn" style="display:block; text-align:center; text-decoration:none; margin-bottom:10px;">
+      💳 Open PayPal.me to Pay ${money(total)}
+    </a>
+    <p style="font-size:11px; color:var(--text-faint); margin:-4px 0 12px 0;">Send the exact amount, then confirm below so we can process your order.</p>
+
+    <button class="checkout-btn" id="confirmPaypalBtn">I've Sent Payment — Confirm Order</button>
     <button class="modal-close" id="modalCloseBtn">Back</button>
   `;
   document.getElementById("modalCloseBtn").addEventListener("click", startCheckout);
-
-  try{ await loadPaypalSdk(); }catch(e){ closeModal(); return; }
-
-  window.paypal.Buttons({
-    style: { layout: 'vertical', color: 'gold', shape: 'rect' },
-    createOrder: (data, actions) => actions.order.create({ purchase_units: [{ description: `User: ${savedUser} - ${buildOrderDescription()}`, amount: { value: total.toFixed(2), currency_code: CURRENCY } }] }),
-    onApprove: (data, actions) => actions.order.capture().then(async details => {
-      const n = document.getElementById("paypalNotesInput").value;
+  document.getElementById("confirmPaypalBtn").addEventListener("click", async () => {
+    const n = document.getElementById("paypalNotesInput").value;
+    try {
       await Api.createOrder({
         method: "PayPal USD",
         items: buildOrderDescription(),
         notes: n
       });
-      showSuccess(details?.payer?.name?.given_name);
+      showSuccess(savedUser);
       cart={};
       renderCart();
-    }),
-    onError: () => showError()
-  }).render('#paypal-button-container');
+    } catch (e) {
+      showError();
+    }
+  });
 }
 
 function finalizeAlternative(methodName, textVal) {
@@ -508,7 +495,11 @@ function finalizeAlternative(methodName, textVal) {
       <div class="form-field" style="margin-top:12px; margin-bottom:12px;">
         <label style="color:#f2c879; font-weight:600;">Your In-Game / Trade Username</label>
         <input type="text" id="altAccDetails" placeholder="Username used for the in-game trade" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;">
-        <p style="font-size:11px; color:var(--text-faint); margin-top:4px;">We only need your username to send a trade request — never share your password with anyone, including this shop.</p>
+      </div>
+      <div class="form-field" style="margin-bottom:12px;">
+        <label style="color:#f2c879; font-weight:600;">Trade / Profile Link</label>
+        <input type="text" id="altTradeLink" placeholder="Link to your profile or trade page" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;">
+        <p style="font-size:11px; color:var(--text-faint); margin-top:4px;">We only need your username and profile/trade link — never share your password with anyone, including this shop.</p>
       </div>
     `;
   } else if (methodName === "PS99 Gems" || methodName === "PS99 Huges") {
@@ -542,12 +533,14 @@ function finalizeAlternative(methodName, textVal) {
   document.getElementById("confirmAltBtn").addEventListener("click", async () => {
     const n = document.getElementById("altNotesInput").value;
     const tradeUsername = document.getElementById("altAccDetails") ? document.getElementById("altAccDetails").value : undefined;
+    const tradeLink = document.getElementById("altTradeLink") ? document.getElementById("altTradeLink").value : undefined;
     const del = document.getElementById("ps99DeliveryType") ? document.getElementById("ps99DeliveryType").value : undefined;
 
     await Api.createOrder({
       method: methodName,
       items: buildOrderDescription(),
       tradeUsername,
+      tradeLink,
       deliveryType: del,
       notes: n
     });

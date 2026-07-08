@@ -1,7 +1,7 @@
 # Eclipses Shop — environment variables
 # Never commit this file or share it publicly.
 
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1524383037356376134/334kmU8gIQ4sCNACCJfZ4D_El2JtZ0exp3Ig6NrfYWQe9S4FlRQ4OkMwxdNT10ePLARp
+DISCORD_WEBHOOK_URL=1524383037356376134/334kmU8gIQ4sCNACCJfZ4D_El2JtZ0exp3Ig6NrfYWQe9S4FlRQ4OkMwxdNT10ePLARp
 
 # Also recommended for production (see server.js comments):
 # JWT_SECRET=some-long-random-string
