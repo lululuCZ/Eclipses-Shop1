@@ -19,6 +19,16 @@
 
 const path = require("path");
 const crypto = require("crypto");
+
+// Loads variables from a local .env file (DISCORD_WEBHOOK_URL, JWT_SECRET, etc.)
+// if the optional `dotenv` package is installed. On hosts like Render/Railway/
+// Fly you'll set these in their dashboard instead, so this is safe to skip there.
+try {
+  require("dotenv").config();
+} catch {
+  console.warn("[warn] dotenv not installed — run `npm install dotenv` to auto-load .env, or export env vars manually.");
+}
+
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
@@ -37,6 +47,48 @@ if (!process.env.JWT_SECRET) {
     "[warn] No JWT_SECRET env var set — using a random secret for this run only.\n" +
     "       Everyone will be logged out on restart. Set JWT_SECRET in production."
   );
+}
+
+// Set DISCORD_WEBHOOK_URL as an env var (never commit it or put it in
+// client-side code) to get pinged in Discord whenever an order comes in.
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
+if (!DISCORD_WEBHOOK_URL) {
+  console.warn("[warn] No DISCORD_WEBHOOK_URL env var set — order notifications are disabled.");
+}
+
+async function notifyDiscordNewOrder(order) {
+  if (!DISCORD_WEBHOOK_URL) return;
+
+  const fields = [
+    { name: "Order ID", value: order.id, inline: true },
+    { name: "Buyer", value: order.username, inline: true },
+    { name: "Method", value: order.method, inline: true },
+    { name: "Items", value: order.itemsSummary || "—" }
+  ];
+  if (order.tradeUsername) fields.push({ name: "Trade Username", value: order.tradeUsername, inline: true });
+  if (order.tradeLink) fields.push({ name: "Trade Link", value: order.tradeLink, inline: true });
+  if (order.deliveryType) fields.push({ name: "Delivery Preference", value: order.deliveryType, inline: true });
+  if (order.notes) fields.push({ name: "Notes", value: order.notes });
+
+  try {
+    const res = await fetch(DISCORD_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "🛒 New order — Eclipses Shop",
+          color: 0xf2c879,
+          fields,
+          timestamp: new Date().toISOString()
+        }]
+      })
+    });
+    if (!res.ok) {
+      console.error(`[discord] webhook responded ${res.status}: ${await res.text()}`);
+    }
+  } catch (err) {
+    console.error("[discord] failed to send order notification:", err.message);
+  }
 }
 
 const db = new Database(DB_PATH);
@@ -77,10 +129,17 @@ db.exec(`
     method TEXT NOT NULL,
     items_summary TEXT NOT NULL,
     trade_username TEXT,
+    trade_link TEXT,
     delivery_type TEXT,
     notes TEXT
   );
 `);
+
+// Older databases created before trade_link existed won't have the column yet.
+const orderCols = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
+if (!orderCols.includes("trade_link")) {
+  db.exec("ALTER TABLE orders ADD COLUMN trade_link TEXT");
+}
 
 // ---- one-time setup: default categories + admin account ----
 const categoryCount = db.prepare("SELECT COUNT(*) AS n FROM categories").get().n;
@@ -305,28 +364,43 @@ app.delete("/api/catalog/items/:id", requireAdmin, (req, res) => {
 
 // ---------------- order routes ----------------
 
-app.post("/api/orders", requireAuth, (req, res) => {
-  const { method, items, tradeUsername, deliveryType, notes } = req.body || {};
+app.post("/api/orders", requireAuth, async (req, res) => {
+  const { method, items, tradeUsername, tradeLink, deliveryType, notes } = req.body || {};
   if (typeof method !== "string" || typeof items !== "string") {
     return res.status(400).json({ error: "method and items are required." });
   }
 
   const id = "ORD-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex");
-  db.prepare(`
-    INSERT INTO orders (id, username, created_at, method, items_summary, trade_username, delivery_type, notes)
-    VALUES (@id, @username, @createdAt, @method, @items, @tradeUsername, @deliveryType, @notes)
-  `).run({
+  const record = {
     id,
     username: req.session.sub,
     createdAt: new Date().toISOString(),
     method: method.slice(0, 40),
     items: items.slice(0, 300),
     tradeUsername: tradeUsername ? String(tradeUsername).trim().slice(0, 60) : null,
+    tradeLink: tradeLink ? String(tradeLink).trim().slice(0, 300) : null,
     deliveryType: deliveryType ? String(deliveryType).slice(0, 60) : null,
     notes: notes ? String(notes).trim().slice(0, 500) : null
-  });
+  };
+
+  db.prepare(`
+    INSERT INTO orders (id, username, created_at, method, items_summary, trade_username, trade_link, delivery_type, notes)
+    VALUES (@id, @username, @createdAt, @method, @items, @tradeUsername, @tradeLink, @deliveryType, @notes)
+  `).run(record);
 
   res.json({ ok: true, orderId: id });
+
+  // Fire-and-forget: don't make the buyer wait on Discord's response.
+  notifyDiscordNewOrder({
+    id,
+    username: record.username,
+    method: record.method,
+    itemsSummary: record.items,
+    tradeUsername: record.tradeUsername,
+    tradeLink: record.tradeLink,
+    deliveryType: record.deliveryType,
+    notes: record.notes
+  });
 });
 
 app.get("/api/orders", requireAdmin, (req, res) => {
@@ -338,6 +412,7 @@ app.get("/api/orders", requireAdmin, (req, res) => {
     method: o.method,
     items: o.items_summary,
     tradeUsername: o.trade_username || undefined,
+    tradeLink: o.trade_link || undefined,
     deliveryType: o.delivery_type || undefined,
     notes: o.notes || undefined
   })));
