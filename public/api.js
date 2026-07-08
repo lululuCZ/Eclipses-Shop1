@@ -37,7 +37,11 @@ const Api = (() => {
 
     createOrder: (order) => request("POST", "/api/orders", order),
     getOrders: () => request("GET", "/api/orders"),
-    clearOrders: () => request("DELETE", "/api/orders")
+    getMyOrders: () => request("GET", "/api/my-orders"),
+    clearOrders: () => request("DELETE", "/api/orders"),
+
+    getOrderMessages: (orderId) => request("GET", `/api/orders/${encodeURIComponent(orderId)}/messages`),
+    sendOrderMessage: (orderId, body) => request("POST", `/api/orders/${encodeURIComponent(orderId)}/messages`, { body })
   };
 })();
 

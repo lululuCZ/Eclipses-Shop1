@@ -88,6 +88,123 @@ let CATALOG = [];
 let cart = {};
 let activeSection = null;
 
+function renderOrderCard(o, opts) {
+  const showBuyer = opts && opts.showBuyer;
+  return `
+    <div class="order-card">
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px;">
+        <div>Order ID: <strong class="mono">${escapeHtml(o.id)}</strong></div>
+        <div style="color:var(--text-dim); font-size:12px;">${escapeHtml(o.date)}</div>
+      </div>
+      ${showBuyer ? `
+        <div style="margin-bottom:8px;">
+          Buyer: <strong>${escapeHtml(o.user)}</strong>
+          <span class="order-badge" style="background:rgba(255,255,255,0.1); color:#fff;">${escapeHtml(o.method)}</span>
+        </div>
+      ` : `
+        <div style="margin-bottom:8px;">
+          <span class="order-badge" style="background:rgba(255,255,255,0.1); color:#fff;">${escapeHtml(o.method)}</span>
+        </div>
+      `}
+      <div style="margin-bottom:10px; padding:6px; background:rgba(0,0,0,0.2); border-radius:4px;">
+        <strong>Items Ordered:</strong><br><span style="font-size:13px; color:#ccc;">${escapeHtml(o.items)}</span>
+      </div>
+      ${o.tradeUsername ? `<div style="margin-bottom:6px; color:#f2c879;">🎮 <strong>Trade / In-Game Username:</strong> ${escapeHtml(o.tradeUsername)}</div>` : ''}
+      ${o.tradeLink ? `<div style="margin-bottom:6px; color:#f2c879;">🔗 <strong>Trade / Profile Link:</strong> <a href="${escapeHtml(o.tradeLink)}" target="_blank" rel="noopener" style="color:#f2c879;">${escapeHtml(o.tradeLink)}</a></div>` : ''}
+      ${o.deliveryType ? `<div style="margin-bottom:6px; color:#2bf3b4;">📦 <strong>PS99 Handled Method:</strong> ${escapeHtml(o.deliveryType)}</div>` : ''}
+      <div style="margin-bottom:10px;">📝 <strong>Customer Notes:</strong> ${escapeHtml(o.notes) || 'None'}</div>
+
+      <button class="admin-btn" data-toggle-chat="${escapeHtml(o.id)}" style="width:100%;">💬 Messages</button>
+      <div class="order-chat" id="chat-${escapeHtml(o.id)}" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+        <div id="chat-messages-${escapeHtml(o.id)}" style="max-height:200px; overflow-y:auto; margin-bottom:8px; display:flex; flex-direction:column; gap:6px;">
+          <div style="color:var(--text-faint); font-size:12px;">Loading…</div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="chat-input-${escapeHtml(o.id)}" placeholder="Type a message…" maxlength="1000"
+            style="flex:1; padding:9px 11px; background:var(--bg); border:1px solid var(--border); border-radius:7px; color:#fff; font-family:inherit; font-size:14px;">
+          <button class="checkout-btn" style="width:auto; margin:0; padding:9px 16px;" data-send-chat="${escapeHtml(o.id)}">Send</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+let openChatOrderId = null;
+let chatPollTimer = null;
+
+function stopChatPolling() {
+  if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+  openChatOrderId = null;
+}
+
+async function loadOrderMessages(orderId) {
+  const box = document.getElementById(`chat-messages-${orderId}`);
+  if (!box) return;
+  try {
+    const messages = await Api.getOrderMessages(orderId);
+    box.innerHTML = messages.length ? messages.map(m => `
+      <div style="font-size:13px; ${m.isAdmin ? 'color:#ffd700;' : 'color:#ddd;'}">
+        <strong>${escapeHtml(m.sender)}${m.isAdmin ? ' (Admin)' : ''}:</strong> ${escapeHtml(m.body)}
+      </div>
+    `).join("") : `<div style="color:var(--text-faint); font-size:12px;">No messages yet — say hello!</div>`;
+    box.scrollTop = box.scrollHeight;
+  } catch (err) {
+    box.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function toggleOrderChat(orderId) {
+  const box = document.getElementById(`chat-${orderId}`);
+  if (!box) return;
+
+  if (openChatOrderId === orderId) {
+    box.style.display = "none";
+    stopChatPolling();
+    return;
+  }
+
+  if (openChatOrderId) {
+    const prevBox = document.getElementById(`chat-${openChatOrderId}`);
+    if (prevBox) prevBox.style.display = "none";
+  }
+  stopChatPolling();
+
+  openChatOrderId = orderId;
+  box.style.display = "block";
+  await loadOrderMessages(orderId);
+  chatPollTimer = setInterval(() => loadOrderMessages(orderId), 4000);
+}
+
+async function sendOrderChatMessage(orderId) {
+  const input = document.getElementById(`chat-input-${orderId}`);
+  if (!input) return;
+  const value = input.value.trim();
+  if (!value) return;
+  input.value = "";
+  try {
+    await Api.sendOrderMessage(orderId, value);
+    await loadOrderMessages(orderId);
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function wireOrderChatButtons() {
+  document.querySelectorAll("[data-toggle-chat]").forEach(btn => {
+    btn.addEventListener("click", () => toggleOrderChat(btn.dataset.toggleChat));
+  });
+  document.querySelectorAll("[data-send-chat]").forEach(btn => {
+    const orderId = btn.dataset.sendChat;
+    btn.addEventListener("click", () => sendOrderChatMessage(orderId));
+    const input = document.getElementById(`chat-input-${orderId}`);
+    if (input) {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendOrderChatMessage(orderId);
+      });
+    }
+  });
+}
+
 function findItem(id){
   for(const sec of CATALOG){
     const found = sec.items.find(i => i.id === id);
@@ -128,6 +245,12 @@ function renderTabs(){
     </button>
   `).join("");
 
+  tabsHtml += `
+    <button class="tab ${activeSection === 'my-orders' ? 'active' : ''}" data-section="my-orders">
+      💬 My Orders
+    </button>
+  `;
+
   if (IS_ADMIN) {
     tabsHtml += `
       <button class="tab ${activeSection === 'admin-orders' ? 'active' : ''}" data-section="admin-orders" style="border-color: #ffd700; color: #ffd700;">
@@ -141,6 +264,7 @@ function renderTabs(){
   tabsEl.querySelectorAll(".tab").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       activeSection = btn.dataset.section;
+      stopChatPolling();
       renderTabs();
       renderSections();
     });
@@ -164,25 +288,7 @@ async function renderSections(){
       return;
     }
 
-    const ordersHtml = orders.map(o => `
-      <div class="order-card">
-        <div style="display:flex; justify-content:space-between; margin-bottom:8px; border-bottom:1px solid var(--border); padding-bottom:6px;">
-          <div>Order ID: <strong class="mono">${escapeHtml(o.id)}</strong></div>
-          <div style="color:var(--text-dim); font-size:12px;">${escapeHtml(o.date)}</div>
-        </div>
-        <div style="margin-bottom:8px;">
-          Buyer: <strong>${escapeHtml(o.user)}</strong>
-          <span class="order-badge" style="background:rgba(255,255,255,0.1); color:#fff;">${escapeHtml(o.method)}</span>
-        </div>
-        <div style="margin-bottom:10px; padding:6px; background:rgba(0,0,0,0.2); border-radius:4px;">
-          <strong>Items Ordered:</strong><br><span style="font-size:13px; color:#ccc;">${escapeHtml(o.items)}</span>
-        </div>
-        ${o.tradeUsername ? `<div style="margin-bottom:6px; color:#f2c879;">🎮 <strong>Trade / In-Game Username:</strong> ${escapeHtml(o.tradeUsername)}</div>` : ''}
-        ${o.tradeLink ? `<div style="margin-bottom:6px; color:#f2c879;">🔗 <strong>Trade / Profile Link:</strong> <a href="${escapeHtml(o.tradeLink)}" target="_blank" rel="noopener" style="color:#f2c879;">${escapeHtml(o.tradeLink)}</a></div>` : ''}
-        ${o.deliveryType ? `<div style="margin-bottom:6px; color:#2bf3b4;">📦 <strong>PS99 Handled Method:</strong> ${escapeHtml(o.deliveryType)}</div>` : ''}
-        <div>📝 <strong>Customer Notes:</strong> ${escapeHtml(o.notes) || 'None'}</div>
-      </div>
-    `).join("");
+    const ordersHtml = orders.map(o => renderOrderCard(o, { showBuyer: true })).join("");
 
     container.innerHTML = `
       <section class="section active">
@@ -200,6 +306,35 @@ async function renderSections(){
         renderSections();
       }
     });
+    wireOrderChatButtons();
+    return;
+  }
+
+  if (activeSection === 'my-orders') {
+    let orders = [];
+    try { orders = await Api.getMyOrders(); } catch (e) { console.error(e); }
+
+    if(orders.length === 0) {
+      container.innerHTML = `
+        <section class="section active">
+          <h2>My Orders</h2>
+          <div class="empty-section"><p>You haven't placed any orders yet. Once you do, you can message us here about them.</p></div>
+        </section>
+      `;
+      return;
+    }
+
+    const ordersHtml = orders.map(o => renderOrderCard(o, { showBuyer: false })).join("");
+
+    container.innerHTML = `
+      <section class="section active">
+        <div class="section-head">
+          <h2>My Orders</h2>
+        </div>
+        <div style="max-width:800px; margin:0 auto;">${ordersHtml}</div>
+      </section>
+    `;
+    wireOrderChatButtons();
     return;
   }
 

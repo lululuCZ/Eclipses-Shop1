@@ -133,6 +133,15 @@ db.exec(`
     delivery_type TEXT,
     notes TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS order_messages (
+    id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    sender TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `);
 
 // Older databases created before trade_link existed won't have the column yet.
@@ -364,6 +373,80 @@ app.delete("/api/catalog/items/:id", requireAdmin, (req, res) => {
 
 // ---------------- order routes ----------------
 
+function mapOrder(o) {
+  return {
+    id: o.id,
+    user: o.username,
+    date: new Date(o.created_at).toLocaleString(),
+    method: o.method,
+    items: o.items_summary,
+    tradeUsername: o.trade_username || undefined,
+    tradeLink: o.trade_link || undefined,
+    deliveryType: o.delivery_type || undefined,
+    notes: o.notes || undefined
+  };
+}
+
+// Returns the order row only if the requesting session is allowed to see it
+// (its own owner, or an admin) — otherwise null.
+function getAccessibleOrder(orderId, session) {
+  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
+  if (!order) return null;
+  if (!session.isAdmin && order.username !== session.sub) return null;
+  return order;
+}
+
+app.get("/api/my-orders", requireAuth, (req, res) => {
+  const orders = db.prepare("SELECT * FROM orders WHERE username = ? ORDER BY created_at DESC").all(req.session.sub);
+  res.json(orders.map(mapOrder));
+});
+
+app.get("/api/orders/:id/messages", requireAuth, (req, res) => {
+  const order = getAccessibleOrder(req.params.id, req.session);
+  if (!order) return res.status(404).json({ error: "Order not found." });
+
+  const messages = db.prepare("SELECT * FROM order_messages WHERE order_id = ? ORDER BY created_at ASC").all(req.params.id);
+  res.json(messages.map(m => ({
+    id: m.id,
+    sender: m.sender,
+    isAdmin: !!m.is_admin,
+    body: m.body,
+    createdAt: m.created_at
+  })));
+});
+
+app.post("/api/orders/:id/messages", requireAuth, (req, res) => {
+  const order = getAccessibleOrder(req.params.id, req.session);
+  if (!order) return res.status(404).json({ error: "Order not found." });
+
+  const { body } = req.body || {};
+  if (typeof body !== "string" || !body.trim()) {
+    return res.status(400).json({ error: "Message cannot be empty." });
+  }
+
+  const record = {
+    id: "MSG-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex"),
+    orderId: req.params.id,
+    sender: req.session.sub,
+    isAdmin: req.session.isAdmin ? 1 : 0,
+    body: body.trim().slice(0, 1000),
+    createdAt: new Date().toISOString()
+  };
+
+  db.prepare(`
+    INSERT INTO order_messages (id, order_id, sender, is_admin, body, created_at)
+    VALUES (@id, @orderId, @sender, @isAdmin, @body, @createdAt)
+  `).run(record);
+
+  res.json({
+    id: record.id,
+    sender: record.sender,
+    isAdmin: !!record.isAdmin,
+    body: record.body,
+    createdAt: record.createdAt
+  });
+});
+
 app.post("/api/orders", requireAuth, async (req, res) => {
   const { method, items, tradeUsername, tradeLink, deliveryType, notes } = req.body || {};
   if (typeof method !== "string" || typeof items !== "string") {
@@ -405,17 +488,7 @@ app.post("/api/orders", requireAuth, async (req, res) => {
 
 app.get("/api/orders", requireAdmin, (req, res) => {
   const orders = db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all();
-  res.json(orders.map(o => ({
-    id: o.id,
-    user: o.username,
-    date: new Date(o.created_at).toLocaleString(),
-    method: o.method,
-    items: o.items_summary,
-    tradeUsername: o.trade_username || undefined,
-    tradeLink: o.trade_link || undefined,
-    deliveryType: o.delivery_type || undefined,
-    notes: o.notes || undefined
-  })));
+  res.json(orders.map(mapOrder));
 });
 
 app.delete("/api/orders", requireAdmin, (req, res) => {
