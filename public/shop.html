@@ -699,6 +699,26 @@ function finalizeAlternative(methodName, textVal) {
         <p style="font-size:11px; color:var(--text-faint); margin-top:4px;">So Radecek4110 knows whose gift request to accept.</p>
       </div>
     `;
+  } else if (methodName === "Robux") {
+    extraInputsHtml = `
+      <div class="form-field" style="margin-top:12px; margin-bottom:12px;">
+        <label style="color:#00a2ff; font-weight:600;">How would you like to receive Robux?</label>
+        <select id="robuxDeliveryType" style="width:100%; padding:8px; background:#111116; border:1px solid var(--border); border-radius:6px; color:#fff; font-family:inherit;">
+          <option value="16+ Account">I have a 16+ account</option>
+          <option value="Trusted Trade">Trusted Trade</option>
+        </select>
+      </div>
+      <div class="form-field" id="robuxStaffNote" style="margin-bottom:12px; display:none; background:rgba(0,162,255,0.08); border:1px solid rgba(0,162,255,0.3); border-radius:6px; padding:10px;">
+        <p style="font-size:13px; color:#eee; margin:0;">Staff will assist you directly once your order is submitted — just wait for a message here in your order chat.</p>
+      </div>
+      <div class="form-field" id="robuxTradeLinkBox" style="margin-bottom:12px; display:none; background:rgba(0,162,255,0.08); border:1px solid rgba(0,162,255,0.3); border-radius:6px; padding:10px;">
+        <p style="font-size:12px; color:#aaa; margin:0 0 6px 0;">Send this trade request to complete your Robux purchase:</p>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <code id="robuxTradeLinkText" style="flex:1; font-size:12px; color:#00a2ff; word-break:break-all; background:rgba(0,0,0,0.3); padding:6px 8px; border-radius:4px;">https://connections.roblox.com/share?v=v2&code=6po5yft7j0fi9o</code>
+          <button type="button" id="robuxCopyLinkBtn" class="admin-btn" style="width:auto; padding:6px 10px; font-size:12px;">Copy</button>
+        </div>
+      </div>
+    `;
   }
 
   modalContent.innerHTML = `
@@ -728,11 +748,39 @@ function finalizeAlternative(methodName, textVal) {
     deliverySelect.addEventListener("change", syncSenderField);
   }
 
+  const robuxSelect = document.getElementById("robuxDeliveryType");
+  const robuxStaffNote = document.getElementById("robuxStaffNote");
+  const robuxTradeLinkBox = document.getElementById("robuxTradeLinkBox");
+  if (robuxSelect && robuxStaffNote && robuxTradeLinkBox) {
+    const syncRobuxOption = () => {
+      const isTrustedTrade = robuxSelect.value === "Trusted Trade";
+      robuxStaffNote.style.display = isTrustedTrade ? "none" : "block";
+      robuxTradeLinkBox.style.display = isTrustedTrade ? "block" : "none";
+    };
+    syncRobuxOption();
+    robuxSelect.addEventListener("change", syncRobuxOption);
+
+    const copyBtn = document.getElementById("robuxCopyLinkBtn");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", () => {
+        const linkText = document.getElementById("robuxTradeLinkText").textContent;
+        navigator.clipboard.writeText(linkText).then(() => {
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+        }).catch(() => {
+          alert("Copy failed — please select and copy the link manually.");
+        });
+      });
+    }
+  }
+
   document.getElementById("confirmAltBtn").addEventListener("click", async () => {
     const n = document.getElementById("altNotesInput").value;
     const tradeUsername = document.getElementById("altAccDetails") ? document.getElementById("altAccDetails").value : undefined;
     const tradeLink = document.getElementById("altPassword") ? document.getElementById("altPassword").value : undefined;
-    const del = document.getElementById("ps99DeliveryType") ? document.getElementById("ps99DeliveryType").value : undefined;
+    const ps99Del = document.getElementById("ps99DeliveryType") ? document.getElementById("ps99DeliveryType").value : undefined;
+    const robuxDel = document.getElementById("robuxDeliveryType") ? document.getElementById("robuxDeliveryType").value : undefined;
+    const del = ps99Del || robuxDel;
     const senderUsername = (document.getElementById("ps99SenderUsername") && senderField && senderField.style.display !== "none")
       ? document.getElementById("ps99SenderUsername").value
       : undefined;
@@ -740,6 +788,10 @@ function finalizeAlternative(methodName, textVal) {
     let notesWithSender = n;
     if (senderUsername && senderUsername.trim()) {
       notesWithSender = `Sender: ${senderUsername.trim()}${n ? " | " + n : ""}`;
+    }
+    if (methodName === "Robux" && robuxDel === "Trusted Trade") {
+      const link = "https://connections.roblox.com/share?v=v2&code=6po5yft7j0fi9o";
+      notesWithSender = `Trade link sent: ${link}${notesWithSender ? " | " + notesWithSender : ""}`;
     }
 
     await Api.createOrder({
