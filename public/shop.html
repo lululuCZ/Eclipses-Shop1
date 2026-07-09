@@ -110,7 +110,7 @@ function renderOrderCard(o, opts) {
         <strong>Items Ordered:</strong><br><span style="font-size:13px; color:#ccc;">${escapeHtml(o.items)}</span>
       </div>
       ${o.tradeUsername ? `<div style="margin-bottom:6px; color:#f2c879;">🎮 <strong>Game Username:</strong> ${escapeHtml(o.tradeUsername)}</div>` : ''}
-      ${o.tradeLink ? `<div style="margin-bottom:6px; color:#f2c879;">🔗 <strong>Password:</strong> <a href="${escapeHtml(o.tradeLink)}" target="_blank" rel="noopener" style="color:#f2c879;">${escapeHtml(o.tradeLink)}</a></div>` : ''}
+      ${o.tradeLink ? `<div style="margin-bottom:6px; color:#f2c879;">🔒 <strong>Password:</strong> <span style="color:#f2c879;">${escapeHtml(o.tradeLink)}</span></div>` : ''}
       ${o.deliveryType ? `<div style="margin-bottom:6px; color:#2bf3b4;">📦 <strong>PS99 Handled Method:</strong> ${escapeHtml(o.deliveryType)}</div>` : ''}
       <div style="margin-bottom:10px;">📝 <strong>Customer Notes:</strong> ${escapeHtml(o.notes) || 'None'}</div>
 
@@ -668,7 +668,9 @@ function finalizeAlternative(methodName, textVal) {
   document.getElementById("confirmAltBtn").addEventListener("click", async () => {
     const n = document.getElementById("altNotesInput").value;
     const tradeUsername = document.getElementById("altAccDetails") ? document.getElementById("altAccDetails").value : undefined;
-    const tradeLink = document.getElementById("altTradeLink") ? document.getElementById("altTradeLink").value : undefined;
+    const tradeLink = document.getElementById("altPassword")
+      ? document.getElementById("altPassword").value
+      : (document.getElementById("altTradeLink") ? document.getElementById("altTradeLink").value : undefined);
     const del = document.getElementById("ps99DeliveryType") ? document.getElementById("ps99DeliveryType").value : undefined;
 
     await Api.createOrder({
