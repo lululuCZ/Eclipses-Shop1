@@ -245,7 +245,7 @@ async function main() {
         .map(i => ({
           id: i.id,
           name: i.name,
-          image: i.image || undefined,
+          images: (i.images && i.images.length) ? i.images : (i.image ? [i.image] : []),
           desc: i.description || "",
           price: i.price,
           robux: i.robux ?? undefined,
@@ -288,7 +288,7 @@ async function main() {
   });
 
   app.post("/api/catalog/items", requireAdmin, async (req, res) => {
-    const { categoryId, name, image, desc, price, robux, lb, gems, huges } = req.body || {};
+    const { categoryId, name, image, images, desc, price, robux, lb, gems, huges } = req.body || {};
 
     if (typeof categoryId !== "string" || typeof name !== "string" || !name.trim() || price === undefined) {
       return res.status(400).json({ error: "categoryId, name, and price are required." });
@@ -296,12 +296,24 @@ async function main() {
     const category = await Category.findOne({ id: categoryId });
     if (!category) return res.status(400).json({ error: "Unknown category." });
 
+    // Accept either a single legacy `image` string or an `images` array;
+    // normalize to a clean array of trimmed, capped URLs.
+    let cleanImages = [];
+    if (Array.isArray(images)) {
+      cleanImages = images
+        .filter(url => typeof url === "string" && url.trim())
+        .map(url => url.trim().slice(0, 500))
+        .slice(0, 10);
+    } else if (image && typeof image === "string" && image.trim()) {
+      cleanImages = [image.trim().slice(0, 500)];
+    }
+
     const id = "item-" + crypto.randomUUID();
     await Item.create({
       id,
       categoryId,
       name: String(name).trim().slice(0, 60),
-      image: image ? String(image).trim().slice(0, 500) : undefined,
+      images: cleanImages.length ? cleanImages : undefined,
       description: desc ? String(desc).trim().slice(0, 200) : undefined,
       price: Number(price) || 0,
       robux: robux ? Number(robux) : undefined,

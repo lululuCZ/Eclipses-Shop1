@@ -468,8 +468,16 @@ async function renderSections(){
     </section>
   `;
 
+  container.querySelectorAll(".card").forEach(card=>{
+    card.addEventListener("click", (e)=>{
+      if (e.target.closest(".add-btn") || e.target.closest(".delete-item-btn")) return;
+      openItemModal(card.dataset.id);
+    });
+  });
+
   container.querySelectorAll(".add-btn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
       addToCart(btn.dataset.id);
       btn.textContent = "Added ✓";
       btn.classList.add("added");
@@ -497,18 +505,22 @@ async function renderSections(){
 }
 
 function renderCard(item){
-  const media = item.image
-    ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" class="card-img">`
+  const imgs = item.images || [];
+  const media = imgs.length
+    ? `<img src="${escapeHtml(imgs[0])}" alt="${escapeHtml(item.name)}" class="card-img">`
     : `<span class="card-placeholder">◐</span>`;
+  const countBadge = imgs.length > 1
+    ? `<span class="img-count-badge">🖼 ${imgs.length}</span>`
+    : '';
 
   const deleteBtnHtml = IS_ADMIN
     ? `<button class="delete-item-btn" data-id="${escapeHtml(item.id)}" title="Delete this item">&times;</button>`
     : '';
 
   return `
-    <div class="card">
+    <div class="card" data-id="${escapeHtml(item.id)}">
       ${deleteBtnHtml}
-      <div class="card-icon">${media}</div>
+      <div class="card-icon">${media}${countBadge}</div>
       <div class="card-name">${escapeHtml(item.name)}</div>
       <div class="card-desc">${escapeHtml(item.desc) || ''}</div>
       <div class="card-foot">
@@ -523,6 +535,86 @@ function renderCard(item){
       </div>
     </div>
   `;
+}
+
+let itemModalState = { images: [], index: 0 };
+
+function openItemModal(id){
+  const item = findItem(id);
+  if(!item) return;
+  const imgs = item.images || [];
+  itemModalState = { images: imgs, index: 0 };
+
+  modalContent.innerHTML = `
+    <button class="item-modal-x" id="itemModalCloseX" aria-label="Close">&times;</button>
+    <div class="item-modal">
+      <div class="item-modal-media">
+        <div class="item-modal-main" id="itemModalMain">
+          ${imgs.length
+            ? `<img src="${escapeHtml(imgs[0])}" alt="${escapeHtml(item.name)}" id="itemModalMainImg">`
+            : `<span class="card-placeholder" style="font-size:48px;">◐</span>`}
+          ${imgs.length > 1 ? `
+            <button class="item-modal-nav prev" id="itemModalPrev" aria-label="Previous photo">‹</button>
+            <button class="item-modal-nav next" id="itemModalNext" aria-label="Next photo">›</button>
+          ` : ''}
+        </div>
+        ${imgs.length > 1 ? `
+          <div class="item-modal-thumbs" id="itemModalThumbs">
+            ${imgs.map((src, i) => `<button class="item-modal-thumb${i === 0 ? ' active' : ''}" data-index="${i}"><img src="${escapeHtml(src)}" alt=""></button>`).join("")}
+          </div>
+        ` : ''}
+      </div>
+      <div class="item-modal-info">
+        <h3>${escapeHtml(item.name)}</h3>
+        <p>${escapeHtml(item.desc) || ''}</p>
+        <div class="price-block" style="margin-bottom:18px;">
+          <span class="price-usd">${money(item.price)}</span>
+          ${item.robux ? `<span class="price-robux">${robuxMoney(item.robux)}</span>` : ''}
+          ${item.lb ? `<span class="price-lb">${lbMoney(item.lb)}</span>` : ''}
+          ${item.gems ? `<span class="price-gems">${gemsMoney(item.gems)}</span>` : ''}
+          ${item.huges ? `<span class="price-huges">${hugesMoney(item.huges)}</span>` : ''}
+        </div>
+        <button class="checkout-btn" id="itemModalAddBtn">Add to Cart</button>
+        <button class="modal-close" id="itemModalCloseBtn">Close</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("itemModalCloseX").addEventListener("click", closeModal);
+  document.getElementById("itemModalCloseBtn").addEventListener("click", closeModal);
+  document.getElementById("itemModalAddBtn").addEventListener("click", ()=>{
+    addToCart(item.id);
+    const btn = document.getElementById("itemModalAddBtn");
+    btn.textContent = "Added ✓";
+    setTimeout(()=>{ if(btn) btn.textContent = "Add to Cart"; }, 900);
+  });
+
+  if(imgs.length > 1){
+    document.getElementById("itemModalPrev").addEventListener("click", ()=> stepItemModal(-1));
+    document.getElementById("itemModalNext").addEventListener("click", ()=> stepItemModal(1));
+    document.querySelectorAll(".item-modal-thumb").forEach(t=>{
+      t.addEventListener("click", ()=> setItemModalIndex(Number(t.dataset.index)));
+    });
+  }
+
+  openModal(true);
+}
+
+function setItemModalIndex(i){
+  const imgs = itemModalState.images;
+  if(!imgs.length) return;
+  itemModalState.index = (i + imgs.length) % imgs.length;
+
+  const mainImg = document.getElementById("itemModalMainImg");
+  if(mainImg) mainImg.src = imgs[itemModalState.index];
+
+  document.querySelectorAll(".item-modal-thumb").forEach((t, idx)=>{
+    t.classList.toggle("active", idx === itemModalState.index);
+  });
+}
+
+function stepItemModal(delta){
+  setItemModalIndex(itemModalState.index + delta);
 }
 
 function addToCart(id){
@@ -584,7 +676,7 @@ function renderCart(){
 
   itemsEl.innerHTML = entries.map(([id, c]) => `
     <div class="cart-row">
-      <div class="card-icon" style="width:50px !important; height:50px !important; margin:0;">${c.item.image ? `<img src="${escapeHtml(c.item.image)}" alt="${escapeHtml(c.item.name)}" class="card-img">` : `<span class="card-placeholder">◐</span>`}</div>
+      <div class="card-icon" style="width:50px !important; height:50px !important; margin:0;">${(c.item.images && c.item.images.length) ? `<img src="${escapeHtml(c.item.images[0])}" alt="${escapeHtml(c.item.name)}" class="card-img">` : `<span class="card-placeholder">◐</span>`}</div>
       <div class="cart-row-info">
         <div class="cart-row-name">${escapeHtml(c.item.name)}</div>
         <div class="cart-row-price mono" style="font-size:11px; opacity:0.8;">
@@ -628,8 +720,17 @@ overlay.addEventListener("click", ()=>{ closeDrawer(); closeModal(); });
 const modalOverlay = document.getElementById("modalOverlay");
 const modalContent = document.getElementById("modalContent");
 
-function openModal(){ modalOverlay.classList.add("open"); }
-function closeModal(){ modalOverlay.classList.remove("open"); }
+function openModal(wide){ modalContent.classList.toggle("modal-wide", !!wide); modalOverlay.classList.add("open"); }
+function closeModal(){ modalOverlay.classList.remove("open"); modalContent.classList.remove("modal-wide"); }
+
+document.addEventListener("keydown", (e)=>{
+  if(!modalOverlay.classList.contains("open")) return;
+  if(e.key === "Escape") closeModal();
+  if(itemModalState.images.length > 1){
+    if(e.key === "ArrowLeft") stepItemModal(-1);
+    if(e.key === "ArrowRight") stepItemModal(1);
+  }
+});
 
 function paypalMeLink(amount){
   return `https://paypal.me/${PAYPAL_ME_HANDLE}/${amount.toFixed(2)}${CURRENCY}`;
@@ -908,7 +1009,10 @@ async function openAddItemModal(){
       <select id="itemCategory">${CATALOG.map(sec => `<option value="${sec.id}" ${sec.id === activeSection ? 'selected' : ''}>${escapeHtml(sec.label)}</option>`).join("")}</select>
     </div>
     <div class="form-field"><label for="itemName">Name</label><input type="text" id="itemName" maxlength="60"></div>
-    <div class="form-field"><label for="itemImage">Image URL</label><input type="text" id="itemImage"></div>
+    <div class="form-field">
+      <label for="itemImages">Image URLs (one per line, first is the cover photo)</label>
+      <textarea id="itemImages" rows="3" placeholder="https://example.com/pic1.png&#10;https://example.com/pic2.png"></textarea>
+    </div>
     <div class="form-field"><label for="itemDesc">Description</label><textarea id="itemDesc" maxlength="200" rows="2"></textarea></div>
 
     <div class="form-row">
@@ -932,7 +1036,10 @@ async function openAddItemModal(){
   document.getElementById("submitItem").addEventListener("click", async ()=>{
     const categoryId = document.getElementById("itemCategory").value;
     const name = document.getElementById("itemName").value.trim();
-    const image = document.getElementById("itemImage").value.trim();
+    const images = document.getElementById("itemImages").value
+      .split("\n")
+      .map(s => s.trim())
+      .filter(Boolean);
     const desc = document.getElementById("itemDesc").value.trim();
     const usdRaw = document.getElementById("itemUsd").value;
     const robuxRaw = document.getElementById("itemRobux").value;
@@ -944,7 +1051,7 @@ async function openAddItemModal(){
 
     try {
       CATALOG = await Api.addItem({
-        categoryId, name, image: image || undefined, desc,
+        categoryId, name, images, desc,
         price: Number(usdRaw),
         robux: robuxRaw ? Number(robuxRaw) : undefined,
         lb: lbRaw ? Number(lbRaw) : undefined,

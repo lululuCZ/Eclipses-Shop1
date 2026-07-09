@@ -22,7 +22,8 @@ const ItemSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true }, // "item-<uuid>"
   categoryId: { type: String, required: true, index: true },
   name: { type: String, required: true },
-  image: { type: String },
+  image: { type: String }, // legacy single-image field, kept for old records
+  images: { type: [String], default: undefined }, // ordered list of photo URLs
   description: { type: String },
   price: { type: Number, default: 0 },
   robux: { type: Number },
