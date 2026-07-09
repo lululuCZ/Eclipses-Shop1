@@ -114,15 +114,15 @@ function renderOrderCard(o, opts) {
       ${o.deliveryType ? `<div style="margin-bottom:6px; color:#2bf3b4;">📦 <strong>PS99 Handled Method:</strong> ${escapeHtml(o.deliveryType)}</div>` : ''}
       <div style="margin-bottom:10px;">📝 <strong>Customer Notes:</strong> ${escapeHtml(o.notes) || 'None'}</div>
 
-      <button class="admin-btn" data-toggle-chat="${escapeHtml(o.id)}" style="width:100%;">💬 Messages</button>
+      <button class="admin-btn" data-toggle-chat="${escapeHtml(o.id)}" style="width:100%;" id="chat-toggle-${escapeHtml(o.id)}">💬 Messages</button>
       <div class="order-chat" id="chat-${escapeHtml(o.id)}" style="display:none; margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
-        <div id="chat-messages-${escapeHtml(o.id)}" style="max-height:200px; overflow-y:auto; margin-bottom:8px; display:flex; flex-direction:column; gap:6px;">
-          <div style="color:var(--text-faint); font-size:12px;">Loading…</div>
+        <div id="chat-messages-${escapeHtml(o.id)}" style="max-height:260px; overflow-y:auto; margin-bottom:8px; display:flex; flex-direction:column; gap:8px; padding:10px; background:rgba(0,0,0,0.25); border-radius:8px; scroll-behavior:smooth;">
+          <div style="color:var(--text-faint); font-size:12px; text-align:center;">Loading…</div>
         </div>
         <div style="display:flex; gap:6px;">
           <input type="text" id="chat-input-${escapeHtml(o.id)}" placeholder="Type a message…" maxlength="1000"
             style="flex:1; padding:9px 11px; background:var(--bg); border:1px solid var(--border); border-radius:7px; color:#fff; font-family:inherit; font-size:14px;">
-          <button class="checkout-btn" style="width:auto; margin:0; padding:9px 16px;" data-send-chat="${escapeHtml(o.id)}">Send</button>
+          <button class="checkout-btn" style="width:auto; margin:0; padding:9px 16px;" id="chat-send-btn-${escapeHtml(o.id)}" data-send-chat="${escapeHtml(o.id)}">Send</button>
         </div>
       </div>
     </div>
@@ -137,19 +137,52 @@ function stopChatPolling() {
   openChatOrderId = null;
 }
 
-async function loadOrderMessages(orderId) {
+function formatChatTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+function renderChatBubble(m) {
+  const isMine = m.sender === savedUser;
+  const bubbleColor = isMine ? "rgba(242,200,121,0.15)" : "rgba(255,255,255,0.06)";
+  const borderColor = isMine ? "#f2c879" : "rgba(255,255,255,0.12)";
+  const align = isMine ? "flex-end" : "flex-start";
+  const nameColor = m.isAdmin ? "#ffd700" : "#8ab4ff";
+
+  return `
+    <div style="display:flex; flex-direction:column; align-items:${align};">
+      <div style="max-width:80%; background:${bubbleColor}; border:1px solid ${borderColor}; border-radius:10px; padding:7px 10px;">
+        <div style="font-size:11px; font-weight:600; color:${nameColor}; margin-bottom:2px;">
+          ${escapeHtml(m.sender)}${m.isAdmin ? " · Admin" : ""}
+        </div>
+        <div style="font-size:13px; color:#eee; word-break:break-word; white-space:pre-wrap;">${escapeHtml(m.body)}</div>
+      </div>
+      <div style="font-size:10px; color:var(--text-faint); margin-top:2px;">${formatChatTime(m.createdAt)}</div>
+    </div>
+  `;
+}
+
+async function loadOrderMessages(orderId, opts) {
   const box = document.getElementById(`chat-messages-${orderId}`);
   if (!box) return;
+  const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+
   try {
     const messages = await Api.getOrderMessages(orderId);
-    box.innerHTML = messages.length ? messages.map(m => `
-      <div style="font-size:13px; ${m.isAdmin ? 'color:#ffd700;' : 'color:#ddd;'}">
-        <strong>${escapeHtml(m.sender)}${m.isAdmin ? ' (Admin)' : ''}:</strong> ${escapeHtml(m.body)}
-      </div>
-    `).join("") : `<div style="color:var(--text-faint); font-size:12px;">No messages yet — say hello!</div>`;
-    box.scrollTop = box.scrollHeight;
+    box.innerHTML = messages.length
+      ? messages.map(renderChatBubble).join("")
+      : `<div style="color:var(--text-faint); font-size:12px; text-align:center;">No messages yet — say hello!</div>`;
+
+    const isInitialLoad = opts && opts.initial;
+    if (isInitialLoad || wasNearBottom) {
+      box.scrollTop = box.scrollHeight;
+    }
   } catch (err) {
-    box.innerHTML = `<div style="color:var(--danger); font-size:12px;">${escapeHtml(err.message)}</div>`;
+    box.innerHTML = `<div style="color:var(--danger); font-size:12px; text-align:center;">${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -171,21 +204,35 @@ async function toggleOrderChat(orderId) {
 
   openChatOrderId = orderId;
   box.style.display = "block";
-  await loadOrderMessages(orderId);
+
+  await loadOrderMessages(orderId, { initial: true });
+  const input = document.getElementById(`chat-input-${orderId}`);
+  if (input) input.focus();
+
   chatPollTimer = setInterval(() => loadOrderMessages(orderId), 4000);
 }
 
 async function sendOrderChatMessage(orderId) {
   const input = document.getElementById(`chat-input-${orderId}`);
+  const sendBtn = document.getElementById(`chat-send-btn-${orderId}`);
   if (!input) return;
   const value = input.value.trim();
   if (!value) return;
+
   input.value = "";
+  input.disabled = true;
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "…"; }
+
   try {
     await Api.sendOrderMessage(orderId, value);
-    await loadOrderMessages(orderId);
+    await loadOrderMessages(orderId, { initial: true });
   } catch (err) {
+    input.value = value; // give the message back so nothing is lost
     alert(err.message);
+  } finally {
+    input.disabled = false;
+    input.focus();
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send"; }
   }
 }
 
@@ -646,6 +693,11 @@ function finalizeAlternative(methodName, textVal) {
           <option value="Head to Head Trade with Radecek4110">Head to Head Trade</option>
         </select>
       </div>
+      <div class="form-field" id="ps99SenderField" style="margin-bottom:12px; display:none;">
+        <label style="color:#2bf3b4; font-weight:600;">Your Roblox Username (Sender)</label>
+        <input type="text" id="ps99SenderUsername" placeholder="Your Roblox username" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;">
+        <p style="font-size:11px; color:var(--text-faint); margin-top:4px;">So Radecek4110 knows whose gift request to accept.</p>
+      </div>
     `;
   }
 
@@ -665,21 +717,38 @@ function finalizeAlternative(methodName, textVal) {
     <button class="modal-close" id="modalCloseBtn">Back</button>
   `;
   document.getElementById("modalCloseBtn").addEventListener("click", startCheckout);
+
+  const deliverySelect = document.getElementById("ps99DeliveryType");
+  const senderField = document.getElementById("ps99SenderField");
+  if (deliverySelect && senderField) {
+    const syncSenderField = () => {
+      senderField.style.display = deliverySelect.value === "Direct Gift to Radecek4110" ? "block" : "none";
+    };
+    syncSenderField();
+    deliverySelect.addEventListener("change", syncSenderField);
+  }
+
   document.getElementById("confirmAltBtn").addEventListener("click", async () => {
     const n = document.getElementById("altNotesInput").value;
-    const Username = document.getElementById("altAccDetails") ? document.getElementById("altAccDetails").value : undefined;
-    const Password = document.getElementById("altPassword")
-      ? document.getElementById("altPassword").value
-      : (document.getElementById("altTradeLink") ? document.getElementById("altTradeLink").value : undefined);
+    const tradeUsername = document.getElementById("altAccDetails") ? document.getElementById("altAccDetails").value : undefined;
+    const tradeLink = document.getElementById("altPassword") ? document.getElementById("altPassword").value : undefined;
     const del = document.getElementById("ps99DeliveryType") ? document.getElementById("ps99DeliveryType").value : undefined;
+    const senderUsername = (document.getElementById("ps99SenderUsername") && senderField && senderField.style.display !== "none")
+      ? document.getElementById("ps99SenderUsername").value
+      : undefined;
+
+    let notesWithSender = n;
+    if (senderUsername && senderUsername.trim()) {
+      notesWithSender = `Sender: ${senderUsername.trim()}${n ? " | " + n : ""}`;
+    }
 
     await Api.createOrder({
       method: methodName,
       items: buildOrderDescription(),
-      Username,
-      Password,
+      tradeUsername,
+      tradeLink,
       deliveryType: del,
-      notes: n
+      notes: notesWithSender
     });
 
     showSuccess(savedUser);
