@@ -378,7 +378,7 @@ main {
 .card-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 6px;
 }
 
@@ -1055,7 +1055,7 @@ body.landing {
 .card-img {
   width: 100%;
   height: 100%;
-  object-fit: cover !important;
+  object-fit: contain !important;
 }
 
 /* Enforcing same font sizes and custom neon glows underneath items */
