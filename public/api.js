@@ -44,7 +44,7 @@ const Api = (() => {
     sendOrderMessage: (orderId, body) => request("POST", `/api/orders/${encodeURIComponent(orderId)}/messages`, { body }),
 
     getReviews: () => request("GET", "/api/reviews"),
-    submitReview: (name, stars, text) => request("POST", "/api/reviews", { name, stars, text }),
+    submitReview: (stars, text) => request("POST", "/api/reviews", { stars, text }),
     deleteReview: (id) => request("DELETE", `/api/reviews/${encodeURIComponent(id)}`)
   };
 })();

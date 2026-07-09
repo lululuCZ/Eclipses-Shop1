@@ -14,76 +14,59 @@
 
   <div class="stars"></div>
 
-  <main class="hero">
-    
-    <h1 class="hero-title">Eclipses Shop</h1>
+  <div class="landing-layout">
 
-    <p class="hero-tagline">
-      A trusted spot to buy bases and in-game items. Straightforward pricing,
-      fast delivery, and real support if anything ever goes wrong — no shady
-      middlemen, just what you came for.
-    </p>
+    <main class="hero">
 
-    <div class="trust-row">
-      <div class="trust-item">
-        <span class="trust-icon">◐</span>
-        <span>Trusted sellers</span>
+      <h1 class="hero-title">Eclipses Shop</h1>
+
+      <p class="hero-tagline">
+        A trusted spot to buy bases and in-game items. Straightforward pricing,
+        fast delivery, and real support if anything ever goes wrong — no shady
+        middlemen, just what you came for.
+      </p>
+
+      <div class="trust-row">
+        <div class="trust-item">
+          <span class="trust-icon">◐</span>
+          <span>Trusted sellers</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-icon">◐</span>
+          <span>Secure PayPal checkout</span>
+        </div>
+        <div class="trust-item">
+          <span class="trust-icon">◐</span>
+          <span>Fast delivery</span>
+        </div>
       </div>
-      <div class="trust-item">
-        <span class="trust-icon">◐</span>
-        <span>Secure PayPal checkout</span>
-      </div>
-      <div class="trust-item">
-        <span class="trust-icon">◐</span>
-        <span>Fast delivery</span>
-      </div>
-    </div>
 
-    <div class="methods-grid">
-      <div class="method-card">💳 PayPal Cash <span>USD</span></div>
-      <div class="method-card">🎮 Roblox Asset <span>Robux</span></div>
-      <div class="method-card">◐ In-Game Tokens <span>LB</span></div>
-      <div class="method-card">💎 Pet Sim 99 <span>Gems</span></div>
-      <div class="method-card">🧸 Pet Sim 99 <span>Huges</span></div>
-    </div>
+      <div class="methods-grid">
+        <div class="method-card">💳 PayPal Cash <span>USD</span></div>
+        <div class="method-card">🎮 Roblox Asset <span>Robux</span></div>
+        <div class="method-card">◐ In-Game Tokens <span>LB</span></div>
+        <div class="method-card">💎 Pet Sim 99 <span>Gems</span></div>
+        <div class="method-card">🧸 Pet Sim 99 <span>Huges</span></div>
+      </div>
 
-    <section id="reviewsSection" style="margin-top: 40px; width: 100%; max-width: 640px;">
-      <h2 style="font-family:'Cinzel', serif; font-size: 20px; letter-spacing: 0.03em; color: var(--accent-bright, #f2c879); text-align:center; margin-bottom: 18px;">
-        Reviews &amp; Vouches
-      </h2>
-      <div id="reviewsList" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+      <div id="authBox" style="margin: 24px auto 0 auto; background: rgba(20, 20, 20, 0.6); backdrop-filter: blur(8px); border: 1px solid var(--border, rgba(255,255,255,0.1)); padding: 24px; border-radius: 12px; width: 100%; max-width: 340px; text-align: left; box-sizing: border-box;">
+        <p style="text-align:center; color:#888; font-size:13px;">Loading…</p>
+      </div>
+
+    </main>
+
+    <aside class="reviews-sidebar" id="reviewsSection">
+      <h2>Reviews &amp; Vouches</h2>
+      <div id="reviewsList" class="reviews-list">
         <p style="text-align:center; color:#888; font-size:13px;">Loading reviews…</p>
       </div>
 
-      <div style="background: rgba(20,20,20,0.55); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 16px; text-align: left;">
-        <h3 style="font-family:'Cinzel', serif; font-size: 15px; color: #fff; margin: 0 0 12px 0; text-align:center;">Leave a review</h3>
-        <div style="margin-bottom: 10px;">
-          <label style="display:block; font-size:11px; text-transform:uppercase; color:#888; margin-bottom:4px; font-weight:600;">Your Name</label>
-          <input type="text" id="reviewName" placeholder="Roblox / display name" maxlength="40" style="width:100%; padding:9px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; box-sizing:border-box; font-family:inherit;">
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display:block; font-size:11px; text-transform:uppercase; color:#888; margin-bottom:4px; font-weight:600;">Rating</label>
-          <select id="reviewStars" style="width:100%; padding:9px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; font-family:inherit;">
-            <option value="5">★★★★★ — Excellent</option>
-            <option value="4">★★★★☆ — Good</option>
-            <option value="3">★★★☆☆ — Okay</option>
-            <option value="2">★★☆☆☆ — Poor</option>
-            <option value="1">★☆☆☆☆ — Bad</option>
-          </select>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display:block; font-size:11px; text-transform:uppercase; color:#888; margin-bottom:4px; font-weight:600;">Review</label>
-          <textarea id="reviewText" maxlength="500" placeholder="How was your experience?" style="width:100%; min-height:70px; padding:9px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; box-sizing:border-box; font-family:inherit; resize:vertical;"></textarea>
-        </div>
-        <div id="reviewFormMsg" style="font-size:12px; margin-bottom:10px; min-height:16px; text-align:center;"></div>
-        <button class="enter-btn" id="submitReviewBtn" style="width:100%; margin:0; padding:11px; cursor:pointer;">Submit Review</button>
+      <div id="reviewFormArea">
+        <p style="text-align:center; color:#888; font-size:13px;">Checking login…</p>
       </div>
-    </section>
+    </aside>
 
-    <div id="authBox" style="margin: 24px auto 0 auto; background: rgba(20, 20, 20, 0.6); backdrop-filter: blur(8px); border: 1px solid var(--border, rgba(255,255,255,0.1)); padding: 24px; border-radius: 12px; width: 100%; max-width: 340px; text-align: left; box-sizing: border-box;">
-      <p style="text-align:center; color:#888; font-size:13px;">Loading…</p>
-    </div>
-  </main>
+  </div>
 
 <script>
 // Local fallback in case api.js hasn't loaded yet — avoids a hard dependency
@@ -101,6 +84,9 @@ if (typeof window.escapeHtml !== "function") {
 }
 
 function showLogin() {
+  currentUser = null;
+  renderReviewFormArea();
+
   const authBox = document.getElementById("authBox");
   authBox.style.textAlign = "left";
   authBox.innerHTML = `
@@ -148,7 +134,12 @@ function showRegister() {
   document.getElementById("submitRegisterBtn").addEventListener("click", handleRegister);
 }
 
+let currentUser = null; // { username } when logged in, null otherwise
+
 function showLoggedIn(username, isAdmin) {
+  currentUser = { username, isAdmin };
+  renderReviewFormArea();
+
   const authBox = document.getElementById("authBox");
   authBox.style.textAlign = "center";
 
@@ -168,6 +159,8 @@ function showLoggedIn(username, isAdmin) {
 
   document.getElementById("logoutBtn").addEventListener("click", async () => {
     await Api.logout();
+    currentUser = null;
+    renderReviewFormArea();
     showLogin();
   });
 }
@@ -228,12 +221,12 @@ function renderReviewList(reviews) {
   }
 
   list.innerHTML = reviews.map(r => `
-    <div style="background: rgba(20,20,20,0.55); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px 16px; text-align:left;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-        <strong style="color:#fff; font-size:14px;">${escapeHtml(r.name)}</strong>
-        <span style="color:#f2c879; font-size:13px; letter-spacing:1px;">${renderStars(r.stars)}</span>
+    <div class="review-card">
+      <div class="review-card-head">
+        <strong>${escapeHtml(r.name)}</strong>
+        <span class="review-card-stars">${renderStars(r.stars)}</span>
       </div>
-      <p style="color:#ccc; font-size:13px; margin:0; line-height:1.5;">${escapeHtml(r.text)}</p>
+      <p>${escapeHtml(r.text)}</p>
     </div>
   `).join("");
 }
@@ -248,20 +241,62 @@ async function loadReviews() {
   }
 }
 
+function renderReviewFormArea() {
+  const area = document.getElementById("reviewFormArea");
+  if (!area) return;
+
+  if (!currentUser) {
+    area.innerHTML = `
+      <div class="review-locked">
+        Log in to leave a review.
+      </div>
+    `;
+    return;
+  }
+
+  area.innerHTML = `
+    <div class="review-form-box">
+      <h3>Leave a review</h3>
+      <p style="font-size:11px; color:#888; margin:0 0 10px 0; text-align:center;">
+        Posting as <strong style="color:#ccc;">${escapeHtml(currentUser.username)}</strong>
+      </p>
+      <div style="margin-bottom: 10px;">
+        <label style="display:block; font-size:11px; text-transform:uppercase; color:#888; margin-bottom:4px; font-weight:600;">Rating</label>
+        <select id="reviewStars" style="width:100%; padding:9px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; font-family:inherit;">
+          <option value="5">★★★★★ — Excellent</option>
+          <option value="4">★★★★☆ — Good</option>
+          <option value="3">★★★☆☆ — Okay</option>
+          <option value="2">★★☆☆☆ — Poor</option>
+          <option value="1">★☆☆☆☆ — Bad</option>
+        </select>
+      </div>
+      <div style="margin-bottom: 10px;">
+        <label style="display:block; font-size:11px; text-transform:uppercase; color:#888; margin-bottom:4px; font-weight:600;">Review</label>
+        <textarea id="reviewText" maxlength="500" placeholder="How was your experience?" style="width:100%; min-height:70px; padding:9px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; box-sizing:border-box; font-family:inherit; resize:vertical;"></textarea>
+      </div>
+      <div id="reviewFormMsg" style="font-size:12px; margin-bottom:10px; min-height:16px; text-align:center;"></div>
+      <button class="enter-btn" id="submitReviewBtn" style="width:100%; margin:0; padding:11px; cursor:pointer;">Submit Review</button>
+    </div>
+  `;
+
+  document.getElementById("submitReviewBtn").addEventListener("click", handleReviewSubmit);
+  document.getElementById("reviewText").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.ctrlKey) handleReviewSubmit();
+  });
+}
+
 async function handleReviewSubmit() {
-  const nameEl = document.getElementById("reviewName");
   const starsEl = document.getElementById("reviewStars");
   const textEl = document.getElementById("reviewText");
   const msgEl = document.getElementById("reviewFormMsg");
   const btn = document.getElementById("submitReviewBtn");
 
-  const name = nameEl.value.trim();
   const text = textEl.value.trim();
   const stars = Number(starsEl.value);
 
-  if (!name || !text) {
+  if (!text) {
     msgEl.style.color = "#ff4a4a";
-    msgEl.textContent = "Please fill in your name and a short review.";
+    msgEl.textContent = "Please write a short review.";
     return;
   }
 
@@ -270,8 +305,7 @@ async function handleReviewSubmit() {
   msgEl.textContent = "Submitting…";
 
   try {
-    await Api.submitReview(name, stars, text);
-    nameEl.value = "";
+    await Api.submitReview(stars, text);
     textEl.value = "";
     starsEl.value = "5";
     msgEl.style.color = "#2bf3b4";
@@ -286,10 +320,6 @@ async function handleReviewSubmit() {
 }
 
 loadReviews();
-document.getElementById("submitReviewBtn").addEventListener("click", handleReviewSubmit);
-document.getElementById("reviewText").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && e.ctrlKey) handleReviewSubmit();
-});
 
 (async function init() {
   try {

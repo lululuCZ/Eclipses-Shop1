@@ -427,11 +427,13 @@ async function main() {
     res.json({ ok: true });
   });
 
-  // ---------------- review routes (public — no login required) ----------------
+  // ---------------- review routes ----------------
+  // Reading reviews is public; posting one requires a logged-in account so
+  // the review is tied to a real username instead of arbitrary free text.
 
-  // Very simple per-IP rate limit so the public endpoint can't be spammed.
+  // Simple per-user rate limit so the endpoint can't be spammed.
   // Not persisted across restarts; good enough to deter casual abuse.
-  const reviewSubmitTimestamps = new Map(); // ip -> last submit time (ms)
+  const reviewSubmitTimestamps = new Map(); // username -> last submit time (ms)
   const REVIEW_COOLDOWN_MS = 60 * 1000;
 
   app.get("/api/reviews", async (req, res) => {
@@ -445,17 +447,14 @@ async function main() {
     })));
   });
 
-  app.post("/api/reviews", async (req, res) => {
-    const ip = req.ip || req.connection.remoteAddress || "unknown";
-    const lastSubmit = reviewSubmitTimestamps.get(ip);
+  app.post("/api/reviews", requireAuth, async (req, res) => {
+    const username = req.session.sub;
+    const lastSubmit = reviewSubmitTimestamps.get(username);
     if (lastSubmit && Date.now() - lastSubmit < REVIEW_COOLDOWN_MS) {
       return res.status(429).json({ error: "Please wait a moment before submitting another review." });
     }
 
-    const { name, stars, text } = req.body || {};
-    if (typeof name !== "string" || !name.trim()) {
-      return res.status(400).json({ error: "Name is required." });
-    }
+    const { stars, text } = req.body || {};
     if (typeof text !== "string" || !text.trim()) {
       return res.status(400).json({ error: "Review text is required." });
     }
@@ -467,12 +466,12 @@ async function main() {
     const id = "REV-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex");
     await Review.create({
       id,
-      name: name.trim().slice(0, 40),
+      name: username,
       stars: starsNum,
       text: text.trim().slice(0, 500)
     });
 
-    reviewSubmitTimestamps.set(ip, Date.now());
+    reviewSubmitTimestamps.set(username, Date.now());
     res.json({ ok: true });
   });
 

@@ -793,9 +793,123 @@ body.landing {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow: auto;
   position: relative;
   text-align: center;
+}
+
+/* two-column landing layout: hero on the left, reviews sidebar on the right */
+.landing-layout {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 560px) 320px;
+  align-items: start;
+  justify-content: center;
+  gap: 36px;
+  max-width: 940px;
+  width: 100%;
+  padding: 48px 24px;
+  box-sizing: border-box;
+}
+
+.reviews-sidebar {
+  text-align: left;
+  position: sticky;
+  top: 48px;
+}
+
+.reviews-sidebar h2 {
+  font-family: 'Cinzel', serif;
+  font-size: 18px;
+  letter-spacing: 0.03em;
+  color: var(--accent-bright, #f2c879);
+  text-align: center;
+  margin: 0 0 16px 0;
+}
+
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.review-card {
+  background: rgba(20, 20, 20, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.review-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+  gap: 8px;
+}
+
+.review-card-head strong {
+  color: #fff;
+  font-size: 13px;
+}
+
+.review-card-stars {
+  color: #f2c879;
+  font-size: 12px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.review-card p {
+  color: #ccc;
+  font-size: 12.5px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.review-form-box {
+  background: rgba(20, 20, 20, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: left;
+}
+
+.review-form-box h3 {
+  font-family: 'Cinzel', serif;
+  font-size: 14px;
+  color: #fff;
+  margin: 0 0 12px 0;
+  text-align: center;
+}
+
+.review-locked {
+  background: rgba(20, 20, 20, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 18px 16px;
+  text-align: center;
+  color: #999;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .landing-layout {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 560px;
+  }
+  .reviews-sidebar {
+    position: static;
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 /* Fixed the invalid elliptical dimension configurations here */
