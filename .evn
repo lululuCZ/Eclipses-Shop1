@@ -1,7 +1,6 @@
 # Copy this file to .env and fill in your real values. Never commit .env.
 
-MONGODB_URI=mongodb+srv://<Admin>:<9iuMhCV0lsgLcwEw>@eclipses-shop.amsftzl.mongodb.net/?appName=eclipses-shop
-DB_NAME=eclipses_shop
+MONGODB_URI=mongodb+srv://Admin:9iuMhCV0lsgLcwEw@eclipses-shop.amsftzl.mongodb.net/?appName=eclipses-shop
 
 # Long random string — generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=75631b1b83df74c3339c8d2a0b3cb39a989b74fda94db9fbeb060ffa47db2b33
