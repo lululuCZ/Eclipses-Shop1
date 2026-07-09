@@ -287,8 +287,8 @@ function renderProfileChip() {
 function renderTabs(){
   const tabsEl = document.getElementById("tabs");
   let tabsHtml = CATALOG.map(sec => `
-    <button class="tab ${sec.id === activeSection ? 'active' : ''}" data-section="${sec.id}">
-      ${escapeHtml(sec.label)}
+    <button class="tab ${sec.id === activeSection ? 'active' : ''}" data-section="${sec.id}" data-cat-id="${escapeHtml(sec.id)}" ${IS_ADMIN ? 'draggable="true"' : ''}>
+      ${IS_ADMIN ? '<span class="tab-drag-handle" title="Drag to reorder">⋮⋮</span>' : ''}${escapeHtml(sec.label)}
     </button>
   `).join("");
 
@@ -313,10 +313,77 @@ function renderTabs(){
 
   tabsEl.querySelectorAll(".tab").forEach(btn=>{
     btn.addEventListener("click", ()=>{
+      if (btn.classList.contains("dragging-suppress-click")) return;
       activeSection = btn.dataset.section;
       stopChatPolling();
       renderTabs();
       renderSections();
+    });
+  });
+
+  if (IS_ADMIN) wireCategoryDragReorder(tabsEl);
+
+  // Let a plain vertical mouse-wheel scroll the tab bar horizontally,
+  // since that's the natural gesture on desktop for an overflowed row.
+  if (!tabsEl.dataset.wheelBound) {
+    tabsEl.addEventListener("wheel", (e)=>{
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      if (tabsEl.scrollWidth <= tabsEl.clientWidth) return;
+      e.preventDefault();
+      tabsEl.scrollLeft += e.deltaY;
+    }, { passive: false });
+    tabsEl.dataset.wheelBound = "1";
+  }
+}
+
+let dragSrcCatId = null;
+
+function wireCategoryDragReorder(tabsEl){
+  const catTabs = () => Array.from(tabsEl.querySelectorAll(".tab[data-cat-id]"));
+
+  catTabs().forEach(tab=>{
+    tab.addEventListener("dragstart", (e)=>{
+      dragSrcCatId = tab.dataset.catId;
+      tab.classList.add("dragging-suppress-click", "dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+
+    tab.addEventListener("dragend", ()=>{
+      tab.classList.remove("dragging-suppress-click", "dragging");
+      catTabs().forEach(t => t.classList.remove("drag-over"));
+      dragSrcCatId = null;
+    });
+
+    tab.addEventListener("dragover", (e)=>{
+      if (!dragSrcCatId || dragSrcCatId === tab.dataset.catId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      tab.classList.add("drag-over");
+    });
+
+    tab.addEventListener("dragleave", ()=>{
+      tab.classList.remove("drag-over");
+    });
+
+    tab.addEventListener("drop", async (e)=>{
+      e.preventDefault();
+      tab.classList.remove("drag-over");
+      const targetCatId = tab.dataset.catId;
+      if (!dragSrcCatId || dragSrcCatId === targetCatId) return;
+
+      const fromIndex = CATALOG.findIndex(c => c.id === dragSrcCatId);
+      const toIndex = CATALOG.findIndex(c => c.id === targetCatId);
+      if (fromIndex === -1 || toIndex === -1) return;
+
+      const [moved] = CATALOG.splice(fromIndex, 1);
+      CATALOG.splice(toIndex, 0, moved);
+      renderTabs();
+
+      try {
+        await Api.reorderCategories(CATALOG.map(c => c.id));
+      } catch (err) {
+        console.error(err);
+      }
     });
   });
 }

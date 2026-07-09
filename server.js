@@ -287,6 +287,25 @@ async function main() {
     res.json(await loadCatalog());
   });
 
+  app.put("/api/catalog/categories/reorder", requireAdmin, async (req, res) => {
+    const { orderedIds } = req.body || {};
+    if (!Array.isArray(orderedIds) || !orderedIds.length) {
+      return res.status(400).json({ error: "orderedIds array is required." });
+    }
+
+    const categories = await Category.find({ id: { $in: orderedIds } });
+    const known = new Set(categories.map(c => c.id));
+    if (categories.length !== orderedIds.length || orderedIds.some(id => !known.has(id))) {
+      return res.status(400).json({ error: "orderedIds must match existing categories exactly." });
+    }
+
+    await Promise.all(orderedIds.map((id, index) =>
+      Category.updateOne({ id }, { sortOrder: index })
+    ));
+
+    res.json(await loadCatalog());
+  });
+
   app.post("/api/catalog/items", requireAdmin, async (req, res) => {
     const { categoryId, name, image, images, desc, price, robux, lb, gems, huges } = req.body || {};
 

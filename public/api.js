@@ -32,6 +32,7 @@ const Api = (() => {
     getCatalog: () => request("GET", "/api/catalog"),
     addCategory: (label) => request("POST", "/api/catalog/categories", { label }),
     deleteCategory: (id) => request("DELETE", `/api/catalog/categories/${encodeURIComponent(id)}`),
+    reorderCategories: (orderedIds) => request("PUT", "/api/catalog/categories/reorder", { orderedIds }),
     addItem: (item) => request("POST", "/api/catalog/items", item),
     deleteItem: (id) => request("DELETE", `/api/catalog/items/${encodeURIComponent(id)}`),
 
