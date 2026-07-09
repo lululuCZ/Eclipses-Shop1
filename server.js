@@ -36,7 +36,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 
-const { User, Category, Item, Order, OrderMessage } = require("./models");
+const { User, Category, Item, Order, OrderMessage, Review } = require("./models");
 
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -124,6 +124,7 @@ async function main() {
   // ---------------------------------------------------------------
 
   const app = express();
+  app.set("trust proxy", 1); // needed so req.ip is accurate behind Render/Railway/Fly's proxy
   app.use(express.json());
   app.use(cookieParser());
   app.use(express.static(path.join(__dirname, "public")));
@@ -423,6 +424,60 @@ async function main() {
   app.delete("/api/orders", requireAdmin, async (req, res) => {
     await Order.deleteMany({});
     await OrderMessage.deleteMany({});
+    res.json({ ok: true });
+  });
+
+  // ---------------- review routes (public — no login required) ----------------
+
+  // Very simple per-IP rate limit so the public endpoint can't be spammed.
+  // Not persisted across restarts; good enough to deter casual abuse.
+  const reviewSubmitTimestamps = new Map(); // ip -> last submit time (ms)
+  const REVIEW_COOLDOWN_MS = 60 * 1000;
+
+  app.get("/api/reviews", async (req, res) => {
+    const reviews = await Review.find().sort({ createdAt: -1 }).limit(200);
+    res.json(reviews.map(r => ({
+      id: r.id,
+      name: r.name,
+      stars: r.stars,
+      text: r.text,
+      createdAt: r.createdAt
+    })));
+  });
+
+  app.post("/api/reviews", async (req, res) => {
+    const ip = req.ip || req.connection.remoteAddress || "unknown";
+    const lastSubmit = reviewSubmitTimestamps.get(ip);
+    if (lastSubmit && Date.now() - lastSubmit < REVIEW_COOLDOWN_MS) {
+      return res.status(429).json({ error: "Please wait a moment before submitting another review." });
+    }
+
+    const { name, stars, text } = req.body || {};
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "Name is required." });
+    }
+    if (typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ error: "Review text is required." });
+    }
+    const starsNum = Number(stars);
+    if (!Number.isInteger(starsNum) || starsNum < 1 || starsNum > 5) {
+      return res.status(400).json({ error: "Stars must be a number 1-5." });
+    }
+
+    const id = "REV-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex");
+    await Review.create({
+      id,
+      name: name.trim().slice(0, 40),
+      stars: starsNum,
+      text: text.trim().slice(0, 500)
+    });
+
+    reviewSubmitTimestamps.set(ip, Date.now());
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/reviews/:id", requireAdmin, async (req, res) => {
+    await Review.deleteOne({ id: req.params.id });
     res.json({ ok: true });
   });
 

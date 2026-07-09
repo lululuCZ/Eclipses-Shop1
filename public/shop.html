@@ -303,6 +303,9 @@ function renderTabs(){
       <button class="tab ${activeSection === 'admin-orders' ? 'active' : ''}" data-section="admin-orders" style="border-color: #ffd700; color: #ffd700;">
         📋 Orders Log Panel
       </button>
+      <button class="tab ${activeSection === 'admin-reviews' ? 'active' : ''}" data-section="admin-reviews" style="border-color: #ffd700; color: #ffd700;">
+        ⭐ Reviews Panel
+      </button>
     `;
   }
 
@@ -354,6 +357,51 @@ async function renderSections(){
       }
     });
     wireOrderChatButtons();
+    return;
+  }
+
+  if (activeSection === 'admin-reviews') {
+    let reviews = [];
+    try { reviews = await Api.getReviews(); } catch (e) { console.error(e); }
+
+    if (reviews.length === 0) {
+      container.innerHTML = `
+        <section class="section active">
+          <h2>Customer Reviews</h2>
+          <div class="empty-section"><p>No reviews submitted yet.</p></div>
+        </section>
+      `;
+      return;
+    }
+
+    const reviewsHtml = reviews.map(r => `
+      <div class="order-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div><strong>${escapeHtml(r.name)}</strong> <span style="color:#f2c879; letter-spacing:1px;">${"★".repeat(r.stars)}${"☆".repeat(5 - r.stars)}</span></div>
+          <div style="color:var(--text-dim); font-size:12px;">${new Date(r.createdAt).toLocaleString()}</div>
+        </div>
+        <p style="font-size:13px; color:#ccc; margin-bottom:10px;">${escapeHtml(r.text)}</p>
+        <button class="delete-category-btn" data-delete-review="${escapeHtml(r.id)}" style="background:#ff4a4a; color:#fff;">Delete Review</button>
+      </div>
+    `).join("");
+
+    container.innerHTML = `
+      <section class="section active">
+        <div class="section-head">
+          <h2>Customer Reviews</h2>
+        </div>
+        <div style="max-width:800px; margin:0 auto;">${reviewsHtml}</div>
+      </section>
+    `;
+
+    container.querySelectorAll("[data-delete-review]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (confirm("Delete this review permanently?")) {
+          await Api.deleteReview(btn.dataset.deleteReview);
+          renderSections();
+        }
+      });
+    });
     return;
   }
 

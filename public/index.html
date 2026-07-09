@@ -51,8 +51,32 @@
       <h2 style="font-family:'Cinzel', serif; font-size: 20px; letter-spacing: 0.03em; color: var(--accent-bright, #f2c879); text-align:center; margin-bottom: 18px;">
         Reviews &amp; Vouches
       </h2>
-      <div id="reviewsList" style="display: flex; flex-direction: column; gap: 12px;">
+      <div id="reviewsList" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
         <p style="text-align:center; color:#888; font-size:13px;">Loading reviews…</p>
+      </div>
+
+      <div style="background: rgba(20,20,20,0.55); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 16px; text-align: left;">
+        <h3 style="font-family:'Cinzel', serif; font-size: 15px; color: #fff; margin: 0 0 12px 0; text-align:center;">Leave a review</h3>
+        <div style="margin-bottom: 10px;">
+          <label style="display:block; font-size:11px; text-transform:uppercase; color:#888; margin-bottom:4px; font-weight:600;">Your Name</label>
+          <input type="text" id="reviewName" placeholder="Roblox / display name" maxlength="40" style="width:100%; padding:9px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; box-sizing:border-box; font-family:inherit;">
+        </div>
+        <div style="margin-bottom: 10px;">
+          <label style="display:block; font-size:11px; text-transform:uppercase; color:#888; margin-bottom:4px; font-weight:600;">Rating</label>
+          <select id="reviewStars" style="width:100%; padding:9px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; font-family:inherit;">
+            <option value="5">★★★★★ — Excellent</option>
+            <option value="4">★★★★☆ — Good</option>
+            <option value="3">★★★☆☆ — Okay</option>
+            <option value="2">★★☆☆☆ — Poor</option>
+            <option value="1">★☆☆☆☆ — Bad</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 10px;">
+          <label style="display:block; font-size:11px; text-transform:uppercase; color:#888; margin-bottom:4px; font-weight:600;">Review</label>
+          <textarea id="reviewText" maxlength="500" placeholder="How was your experience?" style="width:100%; min-height:70px; padding:9px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); border-radius:6px; color:#fff; box-sizing:border-box; font-family:inherit; resize:vertical;"></textarea>
+        </div>
+        <div id="reviewFormMsg" style="font-size:12px; margin-bottom:10px; min-height:16px; text-align:center;"></div>
+        <button class="enter-btn" id="submitReviewBtn" style="width:100%; margin:0; padding:11px; cursor:pointer;">Submit Review</button>
       </div>
     </section>
 
@@ -62,6 +86,20 @@
   </main>
 
 <script>
+// Local fallback in case api.js hasn't loaded yet — avoids a hard dependency
+// on script load order for this page's own rendering.
+if (typeof window.escapeHtml !== "function") {
+  window.escapeHtml = function escapeHtml(str) {
+    if (str === undefined || str === null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  };
+}
+
 function showLogin() {
   const authBox = document.getElementById("authBox");
   authBox.style.textAlign = "left";
@@ -176,28 +214,20 @@ async function handleRegister() {
   }
 }
 
-// Edit this list to add/remove/update reviews — no database or login required.
-const REVIEWS = [
-  { name: "xX_Blaze99_Xx", stars: 5, text: "Fast delivery on my PS99 gems order, staff was super helpful the whole way through." },
-  { name: "LunaTrades", stars: 5, text: "Bought Robux via trusted trade, smooth and no issues at all. Will buy again." },
-  { name: "Kev_Roblox", stars: 5, text: "Got my base within minutes of paying. Legit seller, highly recommend." },
-  { name: "sparkleseller22", stars: 4, text: "Good communication, took a little while to confirm but everything arrived as promised." }
-];
-
 function renderStars(count) {
   return "★".repeat(count) + "☆".repeat(5 - count);
 }
 
-function renderReviews() {
+function renderReviewList(reviews) {
   const list = document.getElementById("reviewsList");
   if (!list) return;
 
-  if (!REVIEWS.length) {
-    list.innerHTML = `<p style="text-align:center; color:#888; font-size:13px;">No reviews yet.</p>`;
+  if (!reviews.length) {
+    list.innerHTML = `<p style="text-align:center; color:#888; font-size:13px;">No reviews yet — be the first!</p>`;
     return;
   }
 
-  list.innerHTML = REVIEWS.map(r => `
+  list.innerHTML = reviews.map(r => `
     <div style="background: rgba(20,20,20,0.55); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px 16px; text-align:left;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
         <strong style="color:#fff; font-size:14px;">${escapeHtml(r.name)}</strong>
@@ -208,7 +238,58 @@ function renderReviews() {
   `).join("");
 }
 
-renderReviews();
+async function loadReviews() {
+  const list = document.getElementById("reviewsList");
+  try {
+    const reviews = await Api.getReviews();
+    renderReviewList(reviews);
+  } catch (err) {
+    if (list) list.innerHTML = `<p style="text-align:center; color:#ff4a4a; font-size:13px;">Couldn't load reviews right now.</p>`;
+  }
+}
+
+async function handleReviewSubmit() {
+  const nameEl = document.getElementById("reviewName");
+  const starsEl = document.getElementById("reviewStars");
+  const textEl = document.getElementById("reviewText");
+  const msgEl = document.getElementById("reviewFormMsg");
+  const btn = document.getElementById("submitReviewBtn");
+
+  const name = nameEl.value.trim();
+  const text = textEl.value.trim();
+  const stars = Number(starsEl.value);
+
+  if (!name || !text) {
+    msgEl.style.color = "#ff4a4a";
+    msgEl.textContent = "Please fill in your name and a short review.";
+    return;
+  }
+
+  btn.disabled = true;
+  msgEl.style.color = "#888";
+  msgEl.textContent = "Submitting…";
+
+  try {
+    await Api.submitReview(name, stars, text);
+    nameEl.value = "";
+    textEl.value = "";
+    starsEl.value = "5";
+    msgEl.style.color = "#2bf3b4";
+    msgEl.textContent = "Thanks for the review!";
+    await loadReviews();
+  } catch (err) {
+    msgEl.style.color = "#ff4a4a";
+    msgEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+loadReviews();
+document.getElementById("submitReviewBtn").addEventListener("click", handleReviewSubmit);
+document.getElementById("reviewText").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.ctrlKey) handleReviewSubmit();
+});
 
 (async function init() {
   try {

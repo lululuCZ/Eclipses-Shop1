@@ -41,7 +41,11 @@ const Api = (() => {
     clearOrders: () => request("DELETE", "/api/orders"),
 
     getOrderMessages: (orderId) => request("GET", `/api/orders/${encodeURIComponent(orderId)}/messages`),
-    sendOrderMessage: (orderId, body) => request("POST", `/api/orders/${encodeURIComponent(orderId)}/messages`, { body })
+    sendOrderMessage: (orderId, body) => request("POST", `/api/orders/${encodeURIComponent(orderId)}/messages`, { body }),
+
+    getReviews: () => request("GET", "/api/reviews"),
+    submitReview: (name, stars, text) => request("POST", "/api/reviews", { name, stars, text }),
+    deleteReview: (id) => request("DELETE", `/api/reviews/${encodeURIComponent(id)}`)
   };
 })();
 

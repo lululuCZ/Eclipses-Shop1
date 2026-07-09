@@ -52,10 +52,19 @@ const OrderMessageSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+const ReviewSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true }, // "REV-<ts>-<hex>"
+  name: { type: String, required: true },
+  stars: { type: Number, required: true, min: 1, max: 5 },
+  text: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const User = mongoose.model("User", UserSchema);
 const Category = mongoose.model("Category", CategorySchema);
 const Item = mongoose.model("Item", ItemSchema);
 const Order = mongoose.model("Order", OrderSchema);
 const OrderMessage = mongoose.model("OrderMessage", OrderMessageSchema);
+const Review = mongoose.model("Review", ReviewSchema);
 
-module.exports = { User, Category, Item, Order, OrderMessage };
+module.exports = { User, Category, Item, Order, OrderMessage, Review };
