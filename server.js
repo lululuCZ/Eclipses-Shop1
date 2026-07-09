@@ -1,17 +1,21 @@
 /**
- * Eclipses Shop — backend server
+ * Eclipses Shop — backend server (MongoDB Atlas edition)
  *
- * Real auth + real database, replacing the old localStorage-only version.
+ * Real auth + real database:
  *   - Passwords hashed with bcrypt (server-side, never touch the client).
  *   - Sessions are signed JWTs in httpOnly cookies (not readable/forgeable
  *     from devtools JS the way localStorage was).
- *   - Catalog + orders live in a SQLite file on disk, shared by everyone
- *     who uses the site — not per-browser anymore.
+ *   - Catalog, orders, and chat messages live in MongoDB Atlas, shared by
+ *     everyone who uses the site — not per-browser, not a local file.
  *
  * Run:
  *   npm install
  *   npm start
  * Then open http://localhost:3000
+ *
+ * Required env vars (see .env.example):
+ *   MONGODB_URI   — your Atlas connection string
+ *   JWT_SECRET    — long random string, keep stable across restarts
  *
  * On first run, an admin account is created and its one-time password is
  * printed to this terminal (never sent to the browser).
@@ -20,9 +24,6 @@
 const path = require("path");
 const crypto = require("crypto");
 
-// Loads variables from a local .env file (DISCORD_WEBHOOK_URL, JWT_SECRET, etc.)
-// if the optional `dotenv` package is installed. On hosts like Render/Railway/
-// Fly you'll set these in their dashboard instead, so this is safe to skip there.
 try {
   require("dotenv").config();
 } catch {
@@ -33,14 +34,18 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const Database = require("better-sqlite3");
+const mongoose = require("mongoose");
+
+const { User, Category, Item, Order, OrderMessage } = require("./models");
 
 const PORT = process.env.PORT || 3000;
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data.sqlite");
+const MONGODB_URI = process.env.MONGODB_URI;
 
-// JWT_SECRET should be set as a real environment variable in production
-// (otherwise sessions reset whenever the server restarts). We generate a
-// random one on boot as a safe default for local/dev use.
+if (!MONGODB_URI) {
+  console.error("[fatal] MONGODB_URI is not set. Add it to your .env file or host's env config.");
+  process.exit(1);
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString("hex");
 if (!process.env.JWT_SECRET) {
   console.warn(
@@ -49,8 +54,6 @@ if (!process.env.JWT_SECRET) {
   );
 }
 
-// Set DISCORD_WEBHOOK_URL as an env var (never commit it or put it in
-// client-side code) to get pinged in Discord whenever an order comes in.
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
 if (!DISCORD_WEBHOOK_URL) {
   console.warn("[warn] No DISCORD_WEBHOOK_URL env var set — order notifications are disabled.");
@@ -91,411 +94,344 @@ async function notifyDiscordNewOrder(order) {
   }
 }
 
-const db = new Database(DB_PATH);
-db.pragma("journal_mode = WAL");
+async function main() {
+  await mongoose.connect(MONGODB_URI, { dbName: process.env.DB_NAME || "eclipses_shop" });
+  console.log("[db] connected to MongoDB Atlas");
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    is_admin INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
-  );
+  // ---- one-time setup: default categories + admin account ----
+  const categoryCount = await Category.countDocuments();
+  if (categoryCount === 0) {
+    await Category.create([
+      { id: "bases", label: "Bases", sortOrder: 0 },
+      { id: "other", label: "Other", sortOrder: 1 }
+    ]);
+  }
 
-  CREATE TABLE IF NOT EXISTS categories (
-    id TEXT PRIMARY KEY,
-    label TEXT NOT NULL,
-    sort_order INTEGER NOT NULL DEFAULT 0
-  );
+  const adminExists = await User.findOne({ username: "admin" });
+  if (!adminExists) {
+    const password = crypto.randomBytes(9).toString("base64url");
+    const passwordHash = bcrypt.hashSync(password, 12);
+    await User.create({ username: "admin", passwordHash, isAdmin: true });
 
-  CREATE TABLE IF NOT EXISTS items (
-    id TEXT PRIMARY KEY,
-    category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    image TEXT,
-    description TEXT,
-    price REAL NOT NULL DEFAULT 0,
-    robux INTEGER,
-    lb INTEGER,
-    gems INTEGER,
-    huges INTEGER
-  );
+    console.log("\n==============================================");
+    console.log(" Admin account created for this server.");
+    console.log(" Username: admin");
+    console.log(" Password: " + password);
+    console.log(" (shown once — save it now; change it after logging in)");
+    console.log("==============================================\n");
+  }
 
-  CREATE TABLE IF NOT EXISTS orders (
-    id TEXT PRIMARY KEY,
-    username TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    method TEXT NOT NULL,
-    items_summary TEXT NOT NULL,
-    trade_username TEXT,
-    trade_link TEXT,
-    delivery_type TEXT,
-    notes TEXT
-  );
+  // ---------------------------------------------------------------
 
-  CREATE TABLE IF NOT EXISTS order_messages (
-    id TEXT PRIMARY KEY,
-    order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    sender TEXT NOT NULL,
-    is_admin INTEGER NOT NULL DEFAULT 0,
-    body TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-`);
+  const app = express();
+  app.use(express.json());
+  app.use(cookieParser());
+  app.use(express.static(path.join(__dirname, "public")));
 
-// Older databases created before trade_link existed won't have the column yet.
-const orderCols = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
-if (!orderCols.includes("trade_link")) {
-  db.exec("ALTER TABLE orders ADD COLUMN trade_link TEXT");
-}
+  function signSession(user) {
+    return jwt.sign(
+      { sub: user.username, isAdmin: !!user.isAdmin },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+  }
 
-// ---- one-time setup: default categories + admin account ----
-const categoryCount = db.prepare("SELECT COUNT(*) AS n FROM categories").get().n;
-if (categoryCount === 0) {
-  const insertCat = db.prepare("INSERT INTO categories (id, label, sort_order) VALUES (?, ?, ?)");
-  insertCat.run("bases", "Bases", 0);
-  insertCat.run("other", "Other", 1);
-}
+  function setSessionCookie(res, token) {
+    res.cookie("session", token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+  }
 
-const adminExists = db.prepare("SELECT 1 FROM users WHERE username = 'admin'").get();
-if (!adminExists) {
-  const password = crypto.randomBytes(9).toString("base64url"); // random one-time password
-  const hash = bcrypt.hashSync(password, 12);
-  db.prepare(
-    "INSERT INTO users (username, password_hash, is_admin, created_at) VALUES (?, ?, 1, ?)"
-  ).run("admin", hash, new Date().toISOString());
+  function readSession(req) {
+    const token = req.cookies.session;
+    if (!token) return null;
+    try {
+      return jwt.verify(token, JWT_SECRET);
+    } catch {
+      return null;
+    }
+  }
 
-  console.log("\n==============================================");
-  console.log(" Admin account created for this server.");
-  console.log(" Username: admin");
-  console.log(" Password: " + password);
-  console.log(" (shown once — save it now; change it after logging in)");
-  console.log("==============================================\n");
-}
+  function requireAuth(req, res, next) {
+    const session = readSession(req);
+    if (!session) return res.status(401).json({ error: "Not logged in." });
+    req.session = session;
+    next();
+  }
 
-// ---------------------------------------------------------------
+  function requireAdmin(req, res, next) {
+    const session = readSession(req);
+    if (!session || !session.isAdmin) return res.status(403).json({ error: "Admin only." });
+    req.session = session;
+    next();
+  }
 
-const app = express();
-app.use(express.json());
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, "public")));
+  // ---------------- auth routes ----------------
 
-function signSession(user) {
-  return jwt.sign(
-    { sub: user.username, isAdmin: !!user.is_admin },
-    JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-}
+  app.post("/api/register", async (req, res) => {
+    const { username, password } = req.body || {};
 
-function setSessionCookie(res, token) {
-  res.cookie("session", token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 7 * 24 * 60 * 60 * 1000
+    if (typeof username !== "string" || typeof password !== "string") {
+      return res.status(400).json({ error: "Username and password are required." });
+    }
+    const cleanUsername = username.trim();
+    if (cleanUsername.length < 3 || cleanUsername.length > 32) {
+      return res.status(400).json({ error: "Username must be 3-32 characters." });
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+      return res.status(400).json({ error: "Username can only contain letters, numbers, underscores." });
+    }
+    if (cleanUsername.toLowerCase() === "admin") {
+      return res.status(400).json({ error: "That username is reserved." });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters." });
+    }
+
+    const existing = await User.findOne({ username: cleanUsername });
+    if (existing) {
+      return res.status(409).json({ error: "That username is already taken." });
+    }
+
+    const passwordHash = bcrypt.hashSync(password, 12);
+    await User.create({ username: cleanUsername, passwordHash, isAdmin: false });
+
+    const token = signSession({ username: cleanUsername, isAdmin: false });
+    setSessionCookie(res, token);
+    res.json({ username: cleanUsername, isAdmin: false });
+  });
+
+  app.post("/api/login", async (req, res) => {
+    const { username, password } = req.body || {};
+    if (typeof username !== "string" || typeof password !== "string") {
+      return res.status(400).json({ error: "Username and password are required." });
+    }
+
+    const user = await User.findOne({ username: username.trim() });
+    if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
+      return res.status(401).json({ error: "Invalid username or password." });
+    }
+
+    const token = signSession(user);
+    setSessionCookie(res, token);
+    res.json({ username: user.username, isAdmin: !!user.isAdmin });
+  });
+
+  app.post("/api/logout", (req, res) => {
+    res.clearCookie("session");
+    res.json({ ok: true });
+  });
+
+  app.get("/api/session", (req, res) => {
+    const session = readSession(req);
+    if (!session) return res.status(401).json({ error: "Not logged in." });
+    res.json({ username: session.sub, isAdmin: !!session.isAdmin });
+  });
+
+  // ---------------- catalog routes ----------------
+
+  async function loadCatalog() {
+    const categories = await Category.find().sort({ sortOrder: 1, label: 1 });
+    const items = await Item.find();
+    return categories.map(cat => ({
+      id: cat.id,
+      label: cat.label,
+      items: items
+        .filter(i => i.categoryId === cat.id)
+        .map(i => ({
+          id: i.id,
+          name: i.name,
+          image: i.image || undefined,
+          desc: i.description || "",
+          price: i.price,
+          robux: i.robux ?? undefined,
+          lb: i.lb ?? undefined,
+          gems: i.gems ?? undefined,
+          huges: i.huges ?? undefined
+        }))
+    }));
+  }
+
+  app.get("/api/catalog", async (req, res) => {
+    res.json(await loadCatalog());
+  });
+
+  function slugify(str) {
+    return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || ("cat-" + Date.now());
+  }
+
+  app.post("/api/catalog/categories", requireAdmin, async (req, res) => {
+    const { label } = req.body || {};
+    if (typeof label !== "string" || !label.trim()) {
+      return res.status(400).json({ error: "Category name is required." });
+    }
+    const id = slugify(label);
+    const maxOrderDoc = await Category.findOne().sort({ sortOrder: -1 });
+    const maxOrder = maxOrderDoc ? maxOrderDoc.sortOrder : -1;
+
+    const existing = await Category.findOne({ id });
+    if (!existing) {
+      await Category.create({ id, label: label.trim().slice(0, 40), sortOrder: maxOrder + 1 });
+    }
+
+    res.json(await loadCatalog());
+  });
+
+  app.delete("/api/catalog/categories/:id", requireAdmin, async (req, res) => {
+    await Category.deleteOne({ id: req.params.id });
+    await Item.deleteMany({ categoryId: req.params.id }); // mirrors old ON DELETE CASCADE
+    res.json(await loadCatalog());
+  });
+
+  app.post("/api/catalog/items", requireAdmin, async (req, res) => {
+    const { categoryId, name, image, desc, price, robux, lb, gems, huges } = req.body || {};
+
+    if (typeof categoryId !== "string" || typeof name !== "string" || !name.trim() || price === undefined) {
+      return res.status(400).json({ error: "categoryId, name, and price are required." });
+    }
+    const category = await Category.findOne({ id: categoryId });
+    if (!category) return res.status(400).json({ error: "Unknown category." });
+
+    const id = "item-" + crypto.randomUUID();
+    await Item.create({
+      id,
+      categoryId,
+      name: String(name).trim().slice(0, 60),
+      image: image ? String(image).trim().slice(0, 500) : undefined,
+      description: desc ? String(desc).trim().slice(0, 200) : undefined,
+      price: Number(price) || 0,
+      robux: robux ? Number(robux) : undefined,
+      lb: lb ? Number(lb) : undefined,
+      gems: gems ? Number(gems) : undefined,
+      huges: huges ? Number(huges) : undefined
+    });
+
+    res.json(await loadCatalog());
+  });
+
+  app.delete("/api/catalog/items/:id", requireAdmin, async (req, res) => {
+    await Item.deleteOne({ id: req.params.id });
+    res.json(await loadCatalog());
+  });
+
+  // ---------------- order routes ----------------
+
+  function mapOrder(o) {
+    return {
+      id: o.id,
+      user: o.username,
+      date: new Date(o.createdAt).toLocaleString(),
+      method: o.method,
+      items: o.itemsSummary,
+      tradeUsername: o.tradeUsername || undefined,
+      tradeLink: o.tradeLink || undefined,
+      deliveryType: o.deliveryType || undefined,
+      notes: o.notes || undefined
+    };
+  }
+
+  // Returns the order doc only if the requesting session is allowed to see it
+  // (its own owner, or an admin) — otherwise null.
+  async function getAccessibleOrder(orderId, session) {
+    const order = await Order.findOne({ id: orderId });
+    if (!order) return null;
+    if (!session.isAdmin && order.username !== session.sub) return null;
+    return order;
+  }
+
+  app.get("/api/my-orders", requireAuth, async (req, res) => {
+    const orders = await Order.find({ username: req.session.sub }).sort({ createdAt: -1 });
+    res.json(orders.map(mapOrder));
+  });
+
+  app.get("/api/orders/:id/messages", requireAuth, async (req, res) => {
+    const order = await getAccessibleOrder(req.params.id, req.session);
+    if (!order) return res.status(404).json({ error: "Order not found." });
+
+    const messages = await OrderMessage.find({ orderId: req.params.id }).sort({ createdAt: 1 });
+    res.json(messages.map(m => ({
+      id: m.id,
+      sender: m.sender,
+      isAdmin: !!m.isAdmin,
+      body: m.body,
+      createdAt: m.createdAt
+    })));
+  });
+
+  app.post("/api/orders/:id/messages", requireAuth, async (req, res) => {
+    const order = await getAccessibleOrder(req.params.id, req.session);
+    if (!order) return res.status(404).json({ error: "Order not found." });
+
+    const { body } = req.body || {};
+    if (typeof body !== "string" || !body.trim()) {
+      return res.status(400).json({ error: "Message cannot be empty." });
+    }
+
+    const record = {
+      id: "MSG-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex"),
+      orderId: req.params.id,
+      sender: req.session.sub,
+      isAdmin: !!req.session.isAdmin,
+      body: body.trim().slice(0, 1000)
+    };
+
+    const saved = await OrderMessage.create(record);
+
+    res.json({
+      id: saved.id,
+      sender: saved.sender,
+      isAdmin: !!saved.isAdmin,
+      body: saved.body,
+      createdAt: saved.createdAt
+    });
+  });
+
+  app.post("/api/orders", requireAuth, async (req, res) => {
+    const { method, items, tradeUsername, tradeLink, deliveryType, notes } = req.body || {};
+    if (typeof method !== "string" || typeof items !== "string") {
+      return res.status(400).json({ error: "method and items are required." });
+    }
+
+    const id = "ORD-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex");
+    const record = {
+      id,
+      username: req.session.sub,
+      method: method.slice(0, 40),
+      itemsSummary: items.slice(0, 300),
+      tradeUsername: tradeUsername ? String(tradeUsername).trim().slice(0, 60) : undefined,
+      tradeLink: tradeLink ? String(tradeLink).trim().slice(0, 300) : undefined,
+      deliveryType: deliveryType ? String(deliveryType).slice(0, 60) : undefined,
+      notes: notes ? String(notes).trim().slice(0, 500) : undefined
+    };
+
+    await Order.create(record);
+
+    res.json({ ok: true, orderId: id });
+
+    // Fire-and-forget: don't make the buyer wait on Discord's response.
+    notifyDiscordNewOrder(record);
+  });
+
+  app.get("/api/orders", requireAdmin, async (req, res) => {
+    const orders = await Order.find().sort({ createdAt: -1 });
+    res.json(orders.map(mapOrder));
+  });
+
+  app.delete("/api/orders", requireAdmin, async (req, res) => {
+    await Order.deleteMany({});
+    await OrderMessage.deleteMany({});
+    res.json({ ok: true });
+  });
+
+  app.listen(PORT, () => {
+    console.log(`Eclipses Shop server running at http://localhost:${PORT}`);
   });
 }
 
-function readSession(req) {
-  const token = req.cookies.session;
-  if (!token) return null;
-  try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch {
-    return null;
-  }
-}
-
-function requireAuth(req, res, next) {
-  const session = readSession(req);
-  if (!session) return res.status(401).json({ error: "Not logged in." });
-  req.session = session;
-  next();
-}
-
-function requireAdmin(req, res, next) {
-  const session = readSession(req);
-  if (!session || !session.isAdmin) return res.status(403).json({ error: "Admin only." });
-  req.session = session;
-  next();
-}
-
-// ---------------- auth routes ----------------
-
-app.post("/api/register", (req, res) => {
-  const { username, password } = req.body || {};
-
-  if (typeof username !== "string" || typeof password !== "string") {
-    return res.status(400).json({ error: "Username and password are required." });
-  }
-  const cleanUsername = username.trim();
-  if (cleanUsername.length < 3 || cleanUsername.length > 32) {
-    return res.status(400).json({ error: "Username must be 3-32 characters." });
-  }
-  if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
-    return res.status(400).json({ error: "Username can only contain letters, numbers, underscores." });
-  }
-  if (cleanUsername.toLowerCase() === "admin") {
-    return res.status(400).json({ error: "That username is reserved." });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters." });
-  }
-
-  const existing = db.prepare("SELECT 1 FROM users WHERE username = ?").get(cleanUsername);
-  if (existing) {
-    return res.status(409).json({ error: "That username is already taken." });
-  }
-
-  const hash = bcrypt.hashSync(password, 12);
-  db.prepare(
-    "INSERT INTO users (username, password_hash, is_admin, created_at) VALUES (?, ?, 0, ?)"
-  ).run(cleanUsername, hash, new Date().toISOString());
-
-  const token = signSession({ username: cleanUsername, is_admin: 0 });
-  setSessionCookie(res, token);
-  res.json({ username: cleanUsername, isAdmin: false });
-});
-
-app.post("/api/login", (req, res) => {
-  const { username, password } = req.body || {};
-  if (typeof username !== "string" || typeof password !== "string") {
-    return res.status(400).json({ error: "Username and password are required." });
-  }
-
-  const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username.trim());
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-    return res.status(401).json({ error: "Invalid username or password." });
-  }
-
-  const token = signSession(user);
-  setSessionCookie(res, token);
-  res.json({ username: user.username, isAdmin: !!user.is_admin });
-});
-
-app.post("/api/logout", (req, res) => {
-  res.clearCookie("session");
-  res.json({ ok: true });
-});
-
-app.get("/api/session", (req, res) => {
-  const session = readSession(req);
-  if (!session) return res.status(401).json({ error: "Not logged in." });
-  res.json({ username: session.sub, isAdmin: !!session.isAdmin });
-});
-
-// ---------------- catalog routes ----------------
-
-function loadCatalog() {
-  const categories = db.prepare("SELECT * FROM categories ORDER BY sort_order, label").all();
-  const items = db.prepare("SELECT * FROM items").all();
-  return categories.map(cat => ({
-    id: cat.id,
-    label: cat.label,
-    items: items
-      .filter(i => i.category_id === cat.id)
-      .map(i => ({
-        id: i.id,
-        name: i.name,
-        image: i.image || undefined,
-        desc: i.description || "",
-        price: i.price,
-        robux: i.robux ?? undefined,
-        lb: i.lb ?? undefined,
-        gems: i.gems ?? undefined,
-        huges: i.huges ?? undefined
-      }))
-  }));
-}
-
-app.get("/api/catalog", (req, res) => {
-  res.json(loadCatalog());
-});
-
-function slugify(str) {
-  return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || ("cat-" + Date.now());
-}
-
-app.post("/api/catalog/categories", requireAdmin, (req, res) => {
-  const { label } = req.body || {};
-  if (typeof label !== "string" || !label.trim()) {
-    return res.status(400).json({ error: "Category name is required." });
-  }
-  const id = slugify(label);
-  const maxOrder = db.prepare("SELECT COALESCE(MAX(sort_order), -1) AS m FROM categories").get().m;
-
-  db.prepare("INSERT OR IGNORE INTO categories (id, label, sort_order) VALUES (?, ?, ?)")
-    .run(id, label.trim().slice(0, 40), maxOrder + 1);
-
-  res.json(loadCatalog());
-});
-
-app.delete("/api/catalog/categories/:id", requireAdmin, (req, res) => {
-  db.prepare("DELETE FROM categories WHERE id = ?").run(req.params.id);
-  res.json(loadCatalog());
-});
-
-app.post("/api/catalog/items", requireAdmin, (req, res) => {
-  const { categoryId, name, image, desc, price, robux, lb, gems, huges } = req.body || {};
-
-  if (typeof categoryId !== "string" || typeof name !== "string" || !name.trim() || price === undefined) {
-    return res.status(400).json({ error: "categoryId, name, and price are required." });
-  }
-  const category = db.prepare("SELECT 1 FROM categories WHERE id = ?").get(categoryId);
-  if (!category) return res.status(400).json({ error: "Unknown category." });
-
-  const id = "item-" + crypto.randomUUID();
-  db.prepare(`
-    INSERT INTO items (id, category_id, name, image, description, price, robux, lb, gems, huges)
-    VALUES (@id, @categoryId, @name, @image, @desc, @price, @robux, @lb, @gems, @huges)
-  `).run({
-    id,
-    categoryId,
-    name: String(name).trim().slice(0, 60),
-    image: image ? String(image).trim().slice(0, 500) : null,
-    desc: desc ? String(desc).trim().slice(0, 200) : null,
-    price: Number(price) || 0,
-    robux: robux ? Number(robux) : null,
-    lb: lb ? Number(lb) : null,
-    gems: gems ? Number(gems) : null,
-    huges: huges ? Number(huges) : null
-  });
-
-  res.json(loadCatalog());
-});
-
-app.delete("/api/catalog/items/:id", requireAdmin, (req, res) => {
-  db.prepare("DELETE FROM items WHERE id = ?").run(req.params.id);
-  res.json(loadCatalog());
-});
-
-// ---------------- order routes ----------------
-
-function mapOrder(o) {
-  return {
-    id: o.id,
-    user: o.username,
-    date: new Date(o.created_at).toLocaleString(),
-    method: o.method,
-    items: o.items_summary,
-    tradeUsername: o.trade_username || undefined,
-    tradeLink: o.trade_link || undefined,
-    deliveryType: o.delivery_type || undefined,
-    notes: o.notes || undefined
-  };
-}
-
-// Returns the order row only if the requesting session is allowed to see it
-// (its own owner, or an admin) — otherwise null.
-function getAccessibleOrder(orderId, session) {
-  const order = db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
-  if (!order) return null;
-  if (!session.isAdmin && order.username !== session.sub) return null;
-  return order;
-}
-
-app.get("/api/my-orders", requireAuth, (req, res) => {
-  const orders = db.prepare("SELECT * FROM orders WHERE username = ? ORDER BY created_at DESC").all(req.session.sub);
-  res.json(orders.map(mapOrder));
-});
-
-app.get("/api/orders/:id/messages", requireAuth, (req, res) => {
-  const order = getAccessibleOrder(req.params.id, req.session);
-  if (!order) return res.status(404).json({ error: "Order not found." });
-
-  const messages = db.prepare("SELECT * FROM order_messages WHERE order_id = ? ORDER BY created_at ASC").all(req.params.id);
-  res.json(messages.map(m => ({
-    id: m.id,
-    sender: m.sender,
-    isAdmin: !!m.is_admin,
-    body: m.body,
-    createdAt: m.created_at
-  })));
-});
-
-app.post("/api/orders/:id/messages", requireAuth, (req, res) => {
-  const order = getAccessibleOrder(req.params.id, req.session);
-  if (!order) return res.status(404).json({ error: "Order not found." });
-
-  const { body } = req.body || {};
-  if (typeof body !== "string" || !body.trim()) {
-    return res.status(400).json({ error: "Message cannot be empty." });
-  }
-
-  const record = {
-    id: "MSG-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex"),
-    orderId: req.params.id,
-    sender: req.session.sub,
-    isAdmin: req.session.isAdmin ? 1 : 0,
-    body: body.trim().slice(0, 1000),
-    createdAt: new Date().toISOString()
-  };
-
-  db.prepare(`
-    INSERT INTO order_messages (id, order_id, sender, is_admin, body, created_at)
-    VALUES (@id, @orderId, @sender, @isAdmin, @body, @createdAt)
-  `).run(record);
-
-  res.json({
-    id: record.id,
-    sender: record.sender,
-    isAdmin: !!record.isAdmin,
-    body: record.body,
-    createdAt: record.createdAt
-  });
-});
-
-app.post("/api/orders", requireAuth, async (req, res) => {
-  const { method, items, tradeUsername, tradeLink, deliveryType, notes } = req.body || {};
-  if (typeof method !== "string" || typeof items !== "string") {
-    return res.status(400).json({ error: "method and items are required." });
-  }
-
-  const id = "ORD-" + Date.now() + "-" + crypto.randomBytes(3).toString("hex");
-  const record = {
-    id,
-    username: req.session.sub,
-    createdAt: new Date().toISOString(),
-    method: method.slice(0, 40),
-    items: items.slice(0, 300),
-    tradeUsername: tradeUsername ? String(tradeUsername).trim().slice(0, 60) : null,
-    tradeLink: tradeLink ? String(tradeLink).trim().slice(0, 300) : null,
-    deliveryType: deliveryType ? String(deliveryType).slice(0, 60) : null,
-    notes: notes ? String(notes).trim().slice(0, 500) : null
-  };
-
-  db.prepare(`
-    INSERT INTO orders (id, username, created_at, method, items_summary, trade_username, trade_link, delivery_type, notes)
-    VALUES (@id, @username, @createdAt, @method, @items, @tradeUsername, @tradeLink, @deliveryType, @notes)
-  `).run(record);
-
-  res.json({ ok: true, orderId: id });
-
-  // Fire-and-forget: don't make the buyer wait on Discord's response.
-  notifyDiscordNewOrder({
-    id,
-    username: record.username,
-    method: record.method,
-    itemsSummary: record.items,
-    tradeUsername: record.tradeUsername,
-    tradeLink: record.tradeLink,
-    deliveryType: record.deliveryType,
-    notes: record.notes
-  });
-});
-
-app.get("/api/orders", requireAdmin, (req, res) => {
-  const orders = db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all();
-  res.json(orders.map(mapOrder));
-});
-
-app.delete("/api/orders", requireAdmin, (req, res) => {
-  db.prepare("DELETE FROM orders").run();
-  res.json({ ok: true });
-});
-
-app.listen(PORT, () => {
-  console.log(`Eclipses Shop server running at http://localhost:${PORT}`);
+main().catch(err => {
+  console.error("[fatal] failed to start server:", err);
+  process.exit(1);
 });

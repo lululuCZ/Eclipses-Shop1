@@ -1,0 +1,12 @@
+# Copy this file to .env and fill in your real values. Never commit .env.
+
+MONGODB_URI=mongodb+srv://<Admin>:<9iuMhCV0lsgLcwEw>@eclipses-shop.amsftzl.mongodb.net/?appName=eclipses-shop
+DB_NAME=eclipses_shop
+
+# Long random string — generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+JWT_SECRET=75631b1b83df74c3339c8d2a0b3cb39a989b74fda94db9fbeb060ffa47db2b33
+
+# Optional: paste a Discord webhook URL to get pinged when orders come in.
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1524636455572603010/YT4KNNEekfEfVqg-RwaYfE56ODo6HdLdzHtdqJbvWsHY504PMlYxTrEqVVO2f6dZkYPe
+
+PORT=3000
