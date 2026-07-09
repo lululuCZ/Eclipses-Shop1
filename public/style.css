@@ -1044,22 +1044,24 @@ body.landing {
   .grid { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
 }
 
-/* Item image frames: fixed width, height follows the picture's own aspect ratio */
+/* Item image frames: picture is fixed at 300px wide, frame height follows the picture */
 .card-icon {
-  width: 100% !important;
+  width: 300px !important;
+  max-width: 100% !important;
   height: auto !important;
-  min-height: 200px !important;
+  min-height: 80px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.25);
   border-radius: var(--radius);
   overflow: hidden;
-  margin-bottom: 14px;
+  margin: 0 auto 14px auto;
 }
 
 .card-img {
-  width: 100% !important;
+  width: 300px !important;
+  max-width: 100% !important;
   height: auto !important;
   display: block !important;
 }
