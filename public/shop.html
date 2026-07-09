@@ -667,8 +667,8 @@ function finalizeAlternative(methodName, textVal) {
   document.getElementById("modalCloseBtn").addEventListener("click", startCheckout);
   document.getElementById("confirmAltBtn").addEventListener("click", async () => {
     const n = document.getElementById("altNotesInput").value;
-    const tradeUsername = document.getElementById("altAccDetails") ? document.getElementById("altAccDetails").value : undefined;
-    const tradeLink = document.getElementById("altPassword")
+    const Username = document.getElementById("altAccDetails") ? document.getElementById("altAccDetails").value : undefined;
+    const Password = document.getElementById("altPassword")
       ? document.getElementById("altPassword").value
       : (document.getElementById("altTradeLink") ? document.getElementById("altTradeLink").value : undefined);
     const del = document.getElementById("ps99DeliveryType") ? document.getElementById("ps99DeliveryType").value : undefined;
@@ -676,8 +676,8 @@ function finalizeAlternative(methodName, textVal) {
     await Api.createOrder({
       method: methodName,
       items: buildOrderDescription(),
-      tradeUsername,
-      tradeLink,
+      Username,
+      Password,
       deliveryType: del,
       notes: n
     });
