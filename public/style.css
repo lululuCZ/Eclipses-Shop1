@@ -361,7 +361,8 @@ main {
 
 .card-icon {
   width: 100%;
-  aspect-ratio: 1;
+  height: auto;
+  min-height: 90px;
   max-width: 140px;
   border-radius: 8px;
   background: #000;
@@ -377,8 +378,8 @@ main {
 
 .card-img {
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+  height: auto;
+  display: block;
   border-radius: 6px;
 }
 
@@ -550,11 +551,17 @@ main {
 .cart-row .card-icon {
   margin-top: 0;
   width: 44px;
-  height: 44px;
+  height: 44px !important;
   max-width: 44px;
+  min-height: 0 !important;
   aspect-ratio: auto;
   flex: 0 0 auto;
   font-size: 20px;
+}
+
+.cart-row .card-img {
+  height: 100% !important;
+  object-fit: cover !important;
 }
 
 .cart-row-info {
@@ -1037,12 +1044,11 @@ body.landing {
   .grid { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
 }
 
-/* MASSIVE square item image containers */
+/* Item image frames: fixed width, height follows the picture's own aspect ratio */
 .card-icon {
   width: 100% !important;
-  min-height: 300px !important;
-  min-width: 300px !important;
-  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  min-height: 200px !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1053,9 +1059,9 @@ body.landing {
 }
 
 .card-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain !important;
+  width: 100% !important;
+  height: auto !important;
+  display: block !important;
 }
 
 /* Enforcing same font sizes and custom neon glows underneath items */
